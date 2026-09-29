@@ -51,6 +51,8 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
         $"messages?chatId={Uri.EscapeDataString(chatId)}{(before.HasValue ? "&before=" + before : "")}{(beforeId != null ? "&beforeId=" + Uri.EscapeDataString(beforeId) : "")}");
     [HttpGet("media/{id}")]
     public async Task<JsonElement> Media(string id, int? userId) => await client.Send(await HistoryUser(userId), HttpMethod.Get, $"media/{Uri.EscapeDataString(id)}");
+    [HttpGet("stickers")]
+    public Task<JsonElement> Stickers() => client.Send(current.Id, HttpMethod.Get, "stickers");
     [HttpPost("send"), RequestSizeLimit(24_000_000)]
     public async Task<JsonElement> Send(SendRequest r)
     {

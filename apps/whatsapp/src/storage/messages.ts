@@ -116,6 +116,31 @@ export function rawMessage(user: string, id: string): WAMessage | undefined {
     .get(user, id) as { raw: string } | undefined;
   return row ? JSON.parse(row.raw, BufferJSON.reviver) : undefined;
 }
+export function listRecentStickers(user: string) {
+  const rows = db
+    .prepare(
+      "SELECT id,raw FROM messages WHERE user_id=? AND kind='sticker' ORDER BY timestamp DESC,id DESC LIMIT 120",
+    )
+    .all(user) as { id: string; raw: string }[];
+  const seen = new Set<string>();
+  const stickers: { id: string; label: string }[] = [];
+  for (const row of rows) {
+    const message = JSON.parse(row.raw, BufferJSON.reviver) as WAMessage;
+    const sticker = normalizeMessageContent(message.message)?.stickerMessage;
+    if (!sticker || sticker.isLottie) continue;
+    const key = sticker.fileSha256
+      ? Buffer.from(sticker.fileSha256).toString("base64")
+      : row.id;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    stickers.push({
+      id: row.id,
+      label: sticker.accessibilityLabel || "Figurinha",
+    });
+    if (stickers.length === 30) break;
+  }
+  return stickers;
+}
 export function listMessages(
   user: string,
   chatId: string,

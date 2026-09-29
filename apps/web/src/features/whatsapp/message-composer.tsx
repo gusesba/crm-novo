@@ -3,8 +3,9 @@ import { ErrorBox } from "@/components/ui";
 import { post, put } from "@/lib/api";
 import type { Attachment, Chat, Message, SharedContact } from "@/lib/types";
 import { ContactRound, Paperclip, Send, X } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { ComposerAttachmentMenu } from "./composer-attachment-menu";
+import { ComposerEmojiPicker } from "./composer-emoji-picker";
 import { ContactPicker } from "./contact-picker";
 import { VoiceRecorder } from "./voice-recorder";
 export function MessageComposer({
@@ -30,6 +31,19 @@ export function MessageComposer({
   const isSticker = attachment?.mime === "image/webp" && !attachment.asDocument;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  function insertEmoji(emoji: string) {
+    const input = textarea.current;
+    if (!input) return;
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    if (text.length - (end - start) + emoji.length > input.maxLength) return;
+    setText(text.slice(0, start) + emoji + text.slice(end));
+    requestAnimationFrame(() => {
+      input.focus();
+      input.setSelectionRange(start + emoji.length, start + emoji.length);
+    });
+  }
   async function send(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (recording || (!text.trim() && !attachment && !contact)) return;
@@ -112,6 +126,13 @@ export function MessageComposer({
                 src={`data:${attachment.mime};base64,${attachment.data}`}
               />
             )}
+            {isSticker && (
+              <img
+                className="composer-sticker-preview"
+                src={`data:image/webp;base64,${attachment.data}`}
+                alt="Prévia da figurinha selecionada"
+              />
+            )}
           </div>
         )}
         <div className="composer-input">
@@ -127,6 +148,17 @@ export function MessageComposer({
               }}
             />
           )}
+          <ComposerEmojiPicker
+            disabled={busy || recording || isSticker || !!contact}
+            onSelect={insertEmoji}
+            allowSticker={!editing}
+            onError={setError}
+            onStickerSelect={(file) => {
+              setAttachment(file);
+              setContact(undefined);
+              setText("");
+            }}
+          />
           {!editing &&
             (recording || (!attachment && !contact && !text.trim())) && (
               <VoiceRecorder
@@ -142,6 +174,7 @@ export function MessageComposer({
             )}
           {!recording && (
             <textarea
+              ref={textarea}
               aria-label="Mensagem"
               placeholder={
                 contact

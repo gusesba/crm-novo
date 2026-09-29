@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { db } from "./storage/database.js";
-import { listMessages } from "./storage/messages.js";
+import { listMessages, listRecentStickers } from "./storage/messages.js";
 import { connect, disconnect, sessionStatus } from "./sessions/manager.js";
 import {
   campaignSchema,
@@ -78,6 +78,9 @@ export async function registerRoutes(app: FastifyInstance) {
       query.beforeId,
     );
   });
+  app.get("/sessions/:user/stickers", async (req) =>
+    listRecentStickers(params.parse(req.params).user),
+  );
   app.post("/sessions/:user/send", async (req) =>
     sendMessage(params.parse(req.params).user, sendSchema.parse(req.body)),
   );

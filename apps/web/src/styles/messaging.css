@@ -97,6 +97,7 @@
   color: #a2afa5;
 }
 .chat-main {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -174,8 +175,8 @@
   margin: -6px -8px 7px;
 }
 .message-attachment.sticker {
-  width: min(190px, 48vw);
-  min-height: 150px;
+  width: min(150px, 42vw);
+  min-height: 120px;
   margin: -8px;
 }
 .message-attachment.image,
@@ -241,7 +242,7 @@
 .message-sticker-preview {
   display: block;
   width: 100%;
-  max-height: 190px;
+  max-height: 150px;
   object-fit: contain;
 }
 .message-audio-preview {
@@ -524,7 +525,11 @@
   position: relative;
   flex: none;
 }
+.composer-emoji {
+  flex: none;
+}
 .composer-add-toggle,
+.composer-emoji-toggle,
 .composer-mic {
   width: 42px;
   height: 42px;
@@ -536,10 +541,13 @@
 }
 .composer-add-toggle:hover,
 .composer-add-toggle[aria-expanded="true"],
+.composer-emoji-toggle:hover,
+.composer-emoji-toggle[aria-expanded="true"],
 .composer-mic:hover {
   background: #eaf1e9;
 }
 .composer-add-toggle:disabled,
+.composer-emoji-toggle:disabled,
 .composer-mic:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -554,6 +562,102 @@
   border-radius: 12px;
   background: #202522;
   box-shadow: 0 10px 28px rgba(18, 38, 25, 0.25);
+}
+.composer-emoji-popover {
+  position: fixed;
+  z-index: 30;
+  max-height: calc(100vh - 60px);
+  border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(18, 38, 25, 0.22);
+  overflow: hidden;
+}
+.composer-emoji-popover .EmojiPickerReact {
+  --epr-bg-color: #fff;
+  --epr-category-label-bg-color: #fff;
+  --epr-hover-bg-color: #eef5ed;
+  --epr-focus-bg-color: #eef5ed;
+  --epr-highlight-color: #298362;
+  border-color: #dce5dc;
+}
+.composer-picker-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  height: 40px;
+  padding: 4px;
+  border: 1px solid #dce5dc;
+  border-top: 0;
+  background: #fff;
+}
+.composer-picker-tabs button {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  border-radius: 18px;
+  color: #65766b;
+}
+.composer-picker-tabs button[aria-selected="true"] {
+  background: #e9f3eb;
+  color: #21845b;
+}
+.composer-sticker-picker {
+  height: 340px;
+  overflow-y: auto;
+  border: 1px solid #dce5dc;
+  border-bottom: 0;
+  background: #fff;
+}
+.composer-sticker-heading {
+  padding: 16px 15px 9px;
+  color: #58665c;
+  font-size: 12px;
+  font-weight: 600;
+}
+.composer-sticker-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px;
+  padding: 4px 12px 12px;
+}
+.composer-sticker-grid button {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  aspect-ratio: 1;
+  border-radius: 8px;
+}
+.composer-sticker-grid button:hover:not(:disabled) {
+  background: #edf5ee;
+}
+.composer-sticker-create {
+  border: 1px solid #dce5dc;
+  color: #57705d;
+  font-size: 11px;
+}
+.composer-sticker-create span {
+  margin-top: -10px;
+}
+.composer-sticker-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.composer-sticker-placeholder {
+  width: 80%;
+  height: 80%;
+  border-radius: 8px;
+  background: #edf1ed;
+}
+.composer-sticker-status {
+  padding: 4px 15px 16px;
+  color: #68776a;
+  font-size: 12px;
+}
+.composer-sticker-preview {
+  display: block;
+  width: 92px;
+  height: 92px;
+  object-fit: contain;
 }
 .composer-add-menu button {
   display: flex;
@@ -595,6 +699,18 @@
 }
 .composer-input .button {
   min-height: 42px;
+}
+@container (max-width: 390px) {
+  .composer-input {
+    flex-wrap: wrap;
+  }
+  .composer-input textarea {
+    order: -1;
+    flex-basis: 100%;
+  }
+  .composer-input > .button {
+    margin-left: auto;
+  }
 }
 .composer-options {
   display: flex;

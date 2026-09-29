@@ -15,6 +15,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS chat_states (user_id TEXT, id TEXT, archived INTEGER NOT NULL DEFAULT 0, pinned_at INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(user_id,id));
   CREATE TABLE IF NOT EXISTS messages (user_id TEXT, id TEXT, chat_id TEXT, text TEXT, mine INTEGER, kind TEXT, timestamp INTEGER, raw TEXT, PRIMARY KEY(user_id,id));
   CREATE INDEX IF NOT EXISTS messages_chat ON messages(user_id,chat_id,timestamp);
+  CREATE INDEX IF NOT EXISTS messages_stickers ON messages(user_id,kind,timestamp DESC);
   CREATE TABLE IF NOT EXISTS message_reactions (user_id TEXT, message_id TEXT, sender TEXT, emoji TEXT, PRIMARY KEY(user_id,message_id,sender));
   CREATE TABLE IF NOT EXISTS profile_pictures (user_id TEXT, chat_id TEXT, mime TEXT, data BLOB, updated_at INTEGER, PRIMARY KEY(user_id,chat_id));
   CREATE TABLE IF NOT EXISTS campaigns (id TEXT PRIMARY KEY, user_id TEXT, payload TEXT, status TEXT, sent INTEGER DEFAULT 0, failed INTEGER DEFAULT 0, skipped INTEGER DEFAULT 0, error TEXT, created_at INTEGER);

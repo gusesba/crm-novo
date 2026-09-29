@@ -8,8 +8,13 @@ import { proto, type WAMessage } from "@whiskeysockets/baileys";
 const directory = mkdtempSync(join(tmpdir(), "via-history-test-"));
 process.env.DATA_DIR = directory;
 const { db } = await import("../src/storage/database.js");
-const { canDeleteForEveryone, saveMessage, listMessages, rawMessage } =
-  await import("../src/storage/messages.js");
+const {
+  canDeleteForEveryone,
+  saveMessage,
+  listMessages,
+  listRecentStickers,
+  rawMessage,
+} = await import("../src/storage/messages.js");
 const { listChats, saveChatState } =
   await import("../src/storage/chat-states.js");
 const { saveProfilePicture, storedProfilePicture } =
@@ -94,6 +99,30 @@ test("histórico é isolado por usuário e conversa", () => {
   assert.deepEqual(listMessages("2", chat), []);
   assert.deepEqual(listMessages("1", "5551888888888@s.whatsapp.net"), []);
   assert.equal(rawMessage("2", "000"), undefined);
+});
+test("seletor lista figurinhas recentes sem duplicar e respeita a conta", () => {
+  const user = "recent-stickers";
+  const sticker = (id: string, hash: number) => ({
+    ...message(id),
+    message: {
+      stickerMessage: {
+        mimetype: "image/webp",
+        fileSha256: Uint8Array.from([hash]),
+      },
+    },
+  });
+  saveMessage(user, sticker("first", 1));
+  saveMessage(user, sticker("repeat", 1));
+  saveMessage(user, sticker("second", 2));
+  saveMessage("another-user", sticker("private", 3));
+  assert.deepEqual(
+    listRecentStickers(user).map(({ id }) => id),
+    ["second", "repeat"],
+  );
+  assert.deepEqual(
+    listRecentStickers("another-user").map(({ id }) => id),
+    ["private"],
+  );
 });
 test("histórico expõe metadados de documentos e reconhece figurinhas", () => {
   const user = "attachments";
