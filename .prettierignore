@@ -1,0 +1,9 @@
+node_modules
+.next
+dist
+bin
+obj
+package-lock.json
+FUNCIONALIDADES.md
+**/AGENTS.md
+**/CLAUDE.md

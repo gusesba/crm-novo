@@ -1,0 +1,41 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        API_URL: http://api:5080
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Urls: http://+:5080
+      ConnectionStrings__Crm: Data Source=/app/data/crm.db
+      Seed__AdminUsername: ${ADMIN_USERNAME:-admin}
+      Seed__AdminPassword: ${ADMIN_PASSWORD:?Defina ADMIN_PASSWORD no .env}
+      WhatsApp__Url: http://whatsapp:3080
+      WhatsApp__Secret: ${SERVICE_SECRET:?Defina SERVICE_SECRET no .env}
+      SecureCookies: ${SECURE_COOKIES:-true}
+    volumes:
+      - crm_data:/app/data
+    restart: unless-stopped
+  whatsapp:
+    build:
+      context: .
+      dockerfile: apps/whatsapp/Dockerfile
+    environment:
+      SERVICE_SECRET: ${SERVICE_SECRET:?Defina SERVICE_SECRET no .env}
+      CRM_API_URL: http://api:5080
+    volumes:
+      - whatsapp_data:/repo/apps/whatsapp/data
+    restart: unless-stopped
+volumes:
+  crm_data:
+  whatsapp_data:

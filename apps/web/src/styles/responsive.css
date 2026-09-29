@@ -1,0 +1,83 @@
+@media (min-width: 1600px) {
+  .main-content {
+    max-width: 1500px;
+    margin: 0 auto;
+    width: 100%;
+  }
+}
+@media (max-width: 1200px) {
+  h1 {
+    font-size: 25px;
+  }
+  .filter-row select {
+    max-width: 155px;
+  }
+  .cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 760px) {
+  h1 {
+    font-size: 24px;
+  }
+  .page-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 17px;
+  }
+  .heading-actions {
+    width: 100%;
+  }
+  .cards-grid {
+    grid-template-columns: 1fr;
+  }
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .modal-form {
+    padding: 19px;
+  }
+  .modal-header {
+    padding: 19px;
+  }
+  .table-toolbar {
+    padding: 16px;
+  }
+  .table-toolbar .search-field {
+    width: 100%;
+  }
+  .appointment-row {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .appointment-row .row-actions {
+    margin-left: auto;
+  }
+  .appointment-list {
+    padding: 0 16px;
+  }
+  .filter-row select {
+    max-width: 180px;
+  }
+  .error-box {
+    flex-wrap: wrap;
+  }
+  .page-heading p {
+    line-height: 1.7;
+  }
+  .table-title {
+    padding: 17px;
+  }
+  .table-title h2 {
+    font-size: 13px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

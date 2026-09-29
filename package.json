@@ -1,0 +1,18 @@
+{
+  "name": "via-crm",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "apps/whatsapp"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n api,web,whats \"dotnet run --project apps/api --no-launch-profile -- --environment Development\" \"npm run dev -w apps/web\" \"npm run dev -w apps/whatsapp\"",
+    "build": "npm run build -w apps/web && npm run build -w apps/whatsapp && dotnet build Autoescola.slnx",
+    "test": "dotnet test Autoescola.slnx && npm run test -w apps/whatsapp",
+    "typecheck": "npm run typecheck -w apps/web && npm run typecheck -w apps/whatsapp"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "prettier": "^3.9.9"
+  }
+}

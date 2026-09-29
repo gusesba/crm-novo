@@ -1,0 +1,486 @@
+.overview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  gap: 12px;
+}
+.live-label {
+  font-size: 11px;
+  color: #6c8275;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 500;
+}
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 17px;
+  margin-bottom: 24px;
+}
+.stat-card {
+  padding: 20px 20px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  position: relative;
+  overflow: hidden;
+  min-height: 151px;
+}
+.stat-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 500;
+  color: #839287;
+}
+.stat-icon {
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  border-radius: 9px;
+}
+.stat-icon.mint {
+  background: #edf4ee;
+  color: #86a58d;
+}
+.stat-icon.purple {
+  background: #f0edf7;
+  color: #a296bd;
+}
+.stat-icon.orange {
+  background: #fbf2e6;
+  color: #c3a272;
+}
+.stat-icon.green {
+  background: #456c54;
+  color: #cadbb9;
+}
+.stat-value {
+  display: block;
+  font-size: 33px;
+  font-weight: 500;
+  letter-spacing: -1px;
+  margin: 9px 0 10px;
+  line-height: 1.1;
+}
+.stat-note {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 8px;
+  color: #9ca89f;
+  position: relative;
+  z-index: 1;
+}
+.small-dot {
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #afc0b3;
+}
+.stat-spark {
+  position: absolute;
+  width: 77px;
+  height: 31px;
+  right: 16px;
+  bottom: 13px;
+  opacity: 0.75;
+}
+.stat-spark path {
+  fill: none;
+  stroke: #d1dfd2;
+  stroke-width: 1.7;
+}
+.stat-card.featured {
+  background: #2e553f;
+  border-color: #2e553f;
+  color: #fafcef;
+}
+.featured .stat-top {
+  color: #c1d0bb;
+}
+.featured .stat-note {
+  color: #a9bba1;
+}
+.featured .stat-spark path {
+  stroke: #7e9c66;
+}
+.dashboard-middle {
+  display: grid;
+  grid-template-columns: minmax(0, 1.85fr) minmax(285px, 1fr);
+  gap: 23px;
+  margin-bottom: 23px;
+}
+.chart-legend {
+  display: flex;
+  justify-content: flex-end;
+  gap: 17px;
+  font-size: 9px;
+  color: #93a197;
+  padding: 0 26px 15px;
+}
+.chart-legend > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend-dot {
+  width: 7px;
+  height: 7px;
+  display: inline-block;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.legend-dot.leads {
+  background: #76a78c;
+}
+.legend-dot.sales {
+  background: #b9abd0;
+}
+.chart-container {
+  height: 211px;
+  padding: 0 18px 17px 15px;
+}
+.funnel-total {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 24px 17px;
+}
+.funnel-total strong {
+  font-size: 31px;
+  font-weight: 500;
+  letter-spacing: -1px;
+}
+.funnel-total span {
+  font-size: 10px;
+  color: #9ba79e;
+}
+.stacked-bar {
+  display: flex;
+  height: 10px;
+  gap: 3px;
+  margin: 0 24px 22px;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.segment-0 {
+  background: #91b9a0;
+}
+.segment-1 {
+  background: #365e43;
+}
+.segment-2 {
+  background: #d5c8a1;
+}
+.segment-3 {
+  background: #d4b6ab;
+}
+.segment-4 {
+  background: #c5bdd1;
+}
+.status-list {
+  padding: 0 24px;
+}
+.status-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  margin-bottom: 10px;
+}
+.status-list > div > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #87998c;
+}
+.status-list strong {
+  font-size: 10px;
+  font-weight: 600;
+}
+.status-list small {
+  display: inline-block;
+  color: #adb7b0;
+  font-weight: 400;
+  font-size: 9px;
+  min-width: 35px;
+  text-align: right;
+  margin-left: 10px;
+}
+.funnel-foot {
+  padding: 12px 24px 15px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+  color: #a3ada5;
+  border-top: 1px solid #f2f4f2;
+  margin-top: 15px;
+}
+.dashboard-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1.85fr) minmax(285px, 1fr);
+  gap: 23px;
+  margin-bottom: 23px;
+}
+.seller-table td {
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+.seller-table th {
+  font-size: 7px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  background: white;
+}
+.seller-table .person-cell {
+  gap: 9px;
+}
+.rank {
+  font-size: 9px;
+  color: #bcc4be;
+  margin-right: 2px;
+}
+.sales-count {
+  background: #f0f5f0;
+  color: #73927b;
+  padding: 4px 9px;
+  border-radius: 4px;
+  font-size: 10px;
+}
+.agenda-list {
+  padding: 0 23px;
+}
+.agenda-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid #edf1ee;
+}
+.agenda-item:last-child {
+  border: 0;
+}
+.agenda-time {
+  font-size: 12px;
+  color: #789581;
+  font-weight: 500;
+  flex-shrink: 0;
+  min-width: 43px;
+}
+.agenda-time small {
+  display: block;
+  font-size: 7px;
+  color: #a8b4aa;
+  margin-top: 2px;
+}
+.agenda-item > div {
+  flex: 1;
+  min-width: 0;
+  border-left: 2px solid #d7e6d7;
+  padding-left: 10px;
+}
+.agenda-item strong {
+  font-size: 10px;
+  font-weight: 550;
+}
+.agenda-item p {
+  font-size: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 3px;
+}
+.agenda-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #a3b598;
+}
+.agenda-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 9px;
+  color: #789280;
+  border-top: 1px solid var(--line);
+  padding: 12px;
+}
+.insight-banner {
+  display: flex;
+  gap: 13px;
+  align-items: center;
+  padding: 17px 23px;
+  background: #edf2e9;
+  border: 1px solid #e0e8da;
+  border-radius: 11px;
+}
+.insight-banner > span {
+  width: 33px;
+  height: 33px;
+  border-radius: 9px;
+  background: #e3ecd9;
+  display: grid;
+  place-items: center;
+  color: #8ca179;
+}
+.insight-banner strong {
+  font-size: 11px;
+  font-weight: 550;
+  color: #647958;
+}
+.insight-banner p {
+  font-size: 9px;
+  color: #9aab8f;
+  margin-top: 4px;
+}
+.insight-banner > a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 9px;
+  margin-left: auto;
+  color: #72895d;
+  white-space: nowrap;
+}
+@media (min-width: 1500px) {
+  .chart-container {
+    height: 255px;
+  }
+  .stat-card {
+    min-height: 170px;
+  }
+  .stat-value {
+    font-size: 39px;
+  }
+  .dashboard-middle {
+    grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+  }
+  .dashboard-bottom {
+    grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+  }
+}
+@media (max-width: 1200px) {
+  .stats-grid {
+    gap: 12px;
+  }
+  .stat-card {
+    padding: 16px 15px;
+  }
+  .stat-top {
+    font-size: 10px;
+  }
+  .stat-value {
+    font-size: 29px;
+  }
+  .stat-spark {
+    width: 50px;
+  }
+  .dashboard-middle,
+  .dashboard-bottom {
+    gap: 16px;
+    grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr);
+  }
+  .seller-table th,
+  .seller-table td {
+    padding-left: 11px;
+    padding-right: 11px;
+  }
+  .seller-table .person-cell strong {
+    font-size: 10px;
+  }
+  .seller-table .rank {
+    display: none;
+  }
+  .insight-banner > a {
+    font-size: 8px;
+  }
+}
+@media (max-width: 1050px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .stat-card {
+    min-height: 140px;
+  }
+  .stat-spark {
+    width: 80px;
+  }
+  .dashboard-middle,
+  .dashboard-bottom {
+    grid-template-columns: 1fr;
+  }
+  .funnel-panel {
+    min-height: 320px;
+  }
+  .chart-container {
+    height: 250px;
+  }
+  .seller-table td {
+    padding: 16px 23px;
+  }
+  .insight-banner {
+    flex-wrap: wrap;
+  }
+  .insight-banner > a {
+    margin-left: 46px;
+  }
+}
+@media (max-width: 560px) {
+  .overview-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .stat-top {
+    font-size: 9px;
+  }
+  .stat-icon {
+    width: 26px;
+    height: 26px;
+  }
+  .stat-card {
+    padding: 15px 13px;
+    min-height: 141px;
+  }
+  .stat-value {
+    font-size: 28px;
+    margin-top: 14px;
+  }
+  .stat-note {
+    font-size: 7px;
+  }
+  .stat-spark {
+    display: none;
+  }
+  .panel-heading {
+    padding: 19px 18px 13px;
+  }
+  .panel-heading h2 {
+    font-size: 13px;
+  }
+  .insight-banner {
+    padding: 16px;
+  }
+  .insight-banner > div {
+    flex: 1;
+  }
+  .insight-banner p {
+    line-height: 1.7;
+  }
+  .seller-table td {
+    padding: 13px;
+  }
+  .seller-table th {
+    padding: 13px;
+  }
+  .seller-table .person-cell {
+    gap: 6px;
+  }
+}
