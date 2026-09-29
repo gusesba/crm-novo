@@ -6,6 +6,7 @@ import {
 import pino from "pino";
 import { connectedSocket } from "../sessions/manager.js";
 import {
+  canDeleteForEveryone,
   deleteStoredMessage,
   messageChatId,
   rawMessage,
@@ -126,14 +127,20 @@ export async function deleteMessage(
         new Error("Só é possível excluir suas mensagens para todos."),
         { statusCode: 403 },
       );
+    if (!canDeleteForEveryone(true, Number(previous.messageTimestamp) * 1000))
+      throw Object.assign(
+        new Error("O prazo de dois dias para excluir esta mensagem para todos terminou."),
+        { statusCode: 400 },
+      );
     const result = await connectedSocket(user).sendMessage(chatId, {
       delete: previous.key,
     });
     if (!result?.key.id)
-      throw new Error("O WhatsApp não confirmou a exclusão.");
+      throw new Error("O WhatsApp não confirmou o envio da solicitação.");
+    return { requested: true, forEveryone: true };
   }
   deleteStoredMessage(user, id, chatId);
-  return { deleted: true, forEveryone };
+  return { deleted: true, forEveryone: false };
 }
 function conversationMessage(user: string, id: string, chatId: string) {
   const message = rawMessage(user, id);

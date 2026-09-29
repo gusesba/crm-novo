@@ -8,7 +8,7 @@ import { proto, type WAMessage } from "@whiskeysockets/baileys";
 const directory = mkdtempSync(join(tmpdir(), "via-history-test-"));
 process.env.DATA_DIR = directory;
 const { db } = await import("../src/storage/database.js");
-const { saveMessage, listMessages, rawMessage } =
+const { canDeleteForEveryone, saveMessage, listMessages, rawMessage } =
   await import("../src/storage/messages.js");
 const { listChats, saveChatState } =
   await import("../src/storage/chat-states.js");
@@ -26,6 +26,28 @@ const message = (id: string, text = id): WAMessage => ({
   messageTimestamp: 100,
   message: { conversation: text },
   pushName: "Cliente",
+});
+
+test("exclusão para todos respeita autoria e prazo de dois dias", () => {
+  const now = 2_000_000_000_000;
+  const twoDays = 2 * 24 * 60 * 60 * 1000;
+  assert.equal(canDeleteForEveryone(true, now - twoDays + 1, now), true);
+  assert.equal(canDeleteForEveryone(true, now - twoDays, now), false);
+  assert.equal(canDeleteForEveryone(false, now - 1000, now), false);
+  assert.equal(canDeleteForEveryone(true, 0, now), false);
+});
+
+test("mensagens antigas mantêm histórico sem opção de excluir para todos", async () => {
+  const user = "delete-deadline";
+  const old = { ...message("old-own"), key: { ...message("old-own").key, fromMe: true } };
+  saveMessage(user, old);
+  const stored = listMessages(user, chat).find((item) => item.id === "old-own");
+  assert.equal(stored?.canDeleteForEveryone, false);
+  const { deleteMessage } = await import("../src/messaging/send.js");
+  await assert.rejects(deleteMessage(user, "old-own", chat, true), {
+    statusCode: 400,
+  });
+  assert.ok(rawMessage(user, "old-own"));
 });
 
 test("cursor não perde mensagens com o mesmo timestamp", () => {

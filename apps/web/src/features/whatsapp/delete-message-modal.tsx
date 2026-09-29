@@ -38,8 +38,8 @@ export function DeleteMessageModal({
         {error && <ErrorBox message={error} />}
         <p className="form-note">
           Excluir para mim remove a mensagem somente desta conversa no CRM.
-          {message.mine
-            ? " Excluir para todos também solicita a exclusão no WhatsApp dos participantes."
+          {message.canDeleteForEveryone
+            ? " Excluir para todos solicita a exclusão no WhatsApp. A mensagem só sai do CRM quando o WhatsApp informar a revogação."
             : ""}
         </p>
         <div className="modal-footer delete-message-actions">
@@ -53,7 +53,7 @@ export function DeleteMessageModal({
           >
             {busy ? "Excluindo…" : "Excluir para mim"}
           </button>
-          {!!message.mine && (
+          {message.canDeleteForEveryone && (
             <button
               className="button danger"
               disabled={busy}

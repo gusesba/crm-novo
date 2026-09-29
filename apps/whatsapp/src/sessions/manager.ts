@@ -1,5 +1,6 @@
 import makeWASocket, {
   DisconnectReason,
+  proto,
   type WASocket,
 } from "@whiskeysockets/baileys";
 import pino from "pino";
@@ -149,6 +150,15 @@ export async function connect(user: string) {
   });
   socket.ev.on("messages.update", (updates) => {
     for (const { key, update } of updates) {
+      if (
+        key.id &&
+        update.messageStubType === proto.WebMessageInfo.StubType.REVOKE
+      ) {
+        const previous = rawMessage(user, key.id);
+        const chatId = previous && messageChatId(previous);
+        if (chatId) deleteStoredMessage(user, key.id, chatId);
+        continue;
+      }
       if (key.id && update.message) {
         const previous = rawMessage(user, key.id);
         if (previous) saveMessage(user, { ...previous, ...update });

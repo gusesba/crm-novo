@@ -29,6 +29,7 @@ export function Conversation({
   const [forwarding, setForwarding] = useState<Message>();
   const [deleting, setDeleting] = useState<Message>();
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => {
     end.current?.scrollIntoView({ block: "nearest" });
@@ -56,13 +57,18 @@ export function Conversation({
     }
   }
   async function remove(message: Message, forEveryone: boolean) {
+    setNotice("");
     await api(`/whatsapp/messages/${message.id}`, {
       method: "DELETE",
       body: JSON.stringify({ chatId, forEveryone }),
     });
-    setOlder((items) => items.filter((item) => item.id !== message.id));
-    if (reply?.id === message.id) setReply(undefined);
-    if (editing?.id === message.id) setEditing(undefined);
+    if (forEveryone) {
+      setNotice("Solicitação enviada ao WhatsApp. A mensagem permanece até o WhatsApp informar a revogação.");
+    } else {
+      setOlder((items) => items.filter((item) => item.id !== message.id));
+      if (reply?.id === message.id) setReply(undefined);
+      if (editing?.id === message.id) setEditing(undefined);
+    }
     result.reload();
   }
   const messages = [...older, ...(result.data || [])].filter(
@@ -71,6 +77,7 @@ export function Conversation({
   return (
     <>
       {(error || result.error) && <ErrorBox message={error || result.error} />}
+      {notice && <p className="form-note">{notice}</p>}
       <div className="message-list">
         {messages.length >= 100 && (
           <button className="text-button" onClick={() => void loadOlder()}>

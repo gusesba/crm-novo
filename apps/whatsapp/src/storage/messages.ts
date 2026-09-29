@@ -92,6 +92,19 @@ export function messageChatId(message: WAMessage) {
     ? message.key.remoteJidAlt
     : message.key.remoteJid;
 }
+export function canDeleteForEveryone(
+  mine: boolean,
+  timestamp: number,
+  now = Date.now(),
+) {
+  return (
+    mine &&
+    Number.isFinite(timestamp) &&
+    timestamp > 0 &&
+    timestamp <= now &&
+    now - timestamp < 2 * 24 * 60 * 60 * 1000
+  );
+}
 export function rawMessage(user: string, id: string): WAMessage | undefined {
   const row = db
     .prepare("SELECT raw FROM messages WHERE user_id=? AND id=?")
@@ -138,6 +151,7 @@ export function listMessages(
     const kind = media?.kind || message.kind;
     return {
       ...message,
+      canDeleteForEveryone: canDeleteForEveryone(!!message.mine, message.timestamp),
       kind,
       text:
         attachment &&

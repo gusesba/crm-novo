@@ -94,6 +94,7 @@ export interface Message {
   mine: number;
   kind: string;
   timestamp: number;
+  canDeleteForEveryone: boolean;
   attachment?: {
     name: string;
     mime: string;
