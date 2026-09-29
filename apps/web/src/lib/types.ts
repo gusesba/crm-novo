@@ -102,12 +102,19 @@ export interface Message {
     pageCount?: number;
     thumbnail?: string;
   };
+  contact?: { name: string; phone: string };
   reactions: { emoji: string; mine: boolean }[];
 }
 export interface Attachment {
   name: string;
   mime: string;
   data: string;
+  voiceNote?: boolean;
+  asDocument?: boolean;
+}
+export interface SharedContact {
+  name: string;
+  phone: string;
 }
 export interface ContactGroup {
   id: number;

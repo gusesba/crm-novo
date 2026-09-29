@@ -39,7 +39,10 @@ test("exclusão para todos respeita autoria e prazo de dois dias", () => {
 
 test("mensagens antigas mantêm histórico sem opção de excluir para todos", async () => {
   const user = "delete-deadline";
-  const old = { ...message("old-own"), key: { ...message("old-own").key, fromMe: true } };
+  const old = {
+    ...message("old-own"),
+    key: { ...message("old-own").key, fromMe: true },
+  };
   saveMessage(user, old);
   const stored = listMessages(user, chat).find((item) => item.id === "old-own");
   assert.equal(stored?.canDeleteForEveryone, false);
@@ -48,6 +51,28 @@ test("mensagens antigas mantêm histórico sem opção de excluir para todos", a
     statusCode: 400,
   });
   assert.ok(rawMessage(user, "old-own"));
+});
+
+test("cartão de contato aparece com nome e telefone no histórico", () => {
+  const user = "contact-card";
+  saveMessage(user, {
+    ...message("shared-contact"),
+    message: {
+      contactMessage: {
+        displayName: "Ana Silva",
+        vcard:
+          "BEGIN:VCARD\nVERSION:3.0\nFN:Ana Silva\nTEL;type=CELL;waid=5551999999999:+5551999999999\nEND:VCARD",
+      },
+    },
+  });
+  const stored = listMessages(user, chat).find(
+    (item) => item.id === "shared-contact",
+  );
+  assert.equal(stored?.kind, "contact");
+  assert.deepEqual(stored?.contact, {
+    name: "Ana Silva",
+    phone: "5551999999999",
+  });
 });
 
 test("cursor não perde mensagens com o mesmo timestamp", () => {

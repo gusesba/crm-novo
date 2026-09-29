@@ -130,8 +130,9 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
         if (leads.Count > 0 && !leads.Any(x => x.CurrentSellerId == current.Id)) throw new BusinessException("O contato pertence à carteira de outro vendedor.", 403);
     }
 }
-public record AttachmentRequest(string Name, string Mime, string Data);
-public record SendRequest([Required] string ChatId, [MaxLength(10000)] string? Text, AttachmentRequest? Attachment, string? ReplyTo);
+public record AttachmentRequest(string Name, string Mime, string Data, bool VoiceNote = false, bool AsDocument = false);
+public record ContactRequest(string Name, string Phone);
+public record SendRequest([Required] string ChatId, [MaxLength(10000)] string? Text, AttachmentRequest? Attachment, ContactRequest? Contact, string? ReplyTo);
 public record EditRequest([Required] string ChatId, [Required, MaxLength(10000)] string Text);
 public record ReactionRequest([Required] string ChatId, [MaxLength(8)] string Emoji);
 public record ForwardRequest([Required] string ChatId);

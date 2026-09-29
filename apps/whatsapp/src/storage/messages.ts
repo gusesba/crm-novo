@@ -48,7 +48,9 @@ export function saveMessage(user: string, msg: WAMessage) {
           ? "document"
           : content.stickerMessage
             ? "sticker"
-            : "text";
+            : content.contactMessage
+              ? "contact"
+              : "text";
   const text =
     content.conversation ||
     content.extendedTextMessage?.text ||
@@ -56,6 +58,9 @@ export function saveMessage(user: string, msg: WAMessage) {
     content.videoMessage?.caption ||
     content.documentMessage?.caption ||
     content.documentMessage?.fileName ||
+    (content.contactMessage
+      ? `Contato: ${content.contactMessage.displayName || "Contato"}`
+      : "") ||
     (kind === "sticker" ? "Figurinha" : "") ||
     (kind === "text" ? "Mensagem não suportada" : "Anexo");
   const timestamp =
@@ -147,11 +152,15 @@ export function listMessages(
   }[];
   return messages.map(({ raw, ...message }) => {
     const media = messageMedia(raw);
+    const contact = messageContact(raw);
     const attachment = media?.attachment;
     const kind = media?.kind || message.kind;
     return {
       ...message,
-      canDeleteForEveryone: canDeleteForEveryone(!!message.mine, message.timestamp),
+      canDeleteForEveryone: canDeleteForEveryone(
+        !!message.mine,
+        message.timestamp,
+      ),
       kind,
       text:
         attachment &&
@@ -161,11 +170,25 @@ export function listMessages(
           ? ""
           : message.text,
       attachment,
+      contact,
       reactions: reactions
         .filter((reaction) => reaction.messageId === message.id)
         .map(({ emoji, mine }) => ({ emoji, mine: !!mine })),
     };
   });
+}
+
+function messageContact(raw: string) {
+  const stored = JSON.parse(raw, BufferJSON.reviver) as WAMessage;
+  const card = normalizeMessageContent(stored.message)?.contactMessage;
+  if (!card) return undefined;
+  const name =
+    card.displayName || card.vcard?.match(/^FN:(.+)$/m)?.[1] || "Contato";
+  const phone =
+    card.vcard?.match(/^TEL[^\n]*waid=(\d+):/m)?.[1] ||
+    card.vcard?.match(/^TEL[^:]*:([^\r\n]+)/m)?.[1]?.replace(/\D/g, "") ||
+    "";
+  return { name, phone };
 }
 
 function messageMedia(raw: string) {

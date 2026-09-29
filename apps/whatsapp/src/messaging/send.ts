@@ -4,6 +4,7 @@ import {
   type AnyMessageContent,
 } from "@whiskeysockets/baileys";
 import pino from "pino";
+import { convertVoiceNote } from "./voice-note.js";
 import { connectedSocket } from "../sessions/manager.js";
 import {
   canDeleteForEveryone,
@@ -17,6 +18,21 @@ import type { SendInput } from "./schemas.js";
 export async function sendMessage(user: string, input: SendInput) {
   const socket = connectedSocket(user);
   let content: AnyMessageContent = { text: input.text || "" };
+  if (input.contact) {
+    const { name, phone } = input.contact;
+    const safeName = name.replace(/[\\,;]/g, "\\$&").replace(/\r?\n/g, "\\n");
+    content = {
+      contacts: {
+        displayName: name,
+        contacts: [
+          {
+            displayName: name,
+            vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:${safeName}\nTEL;type=CELL;waid=${phone}:+${phone}\nEND:VCARD`,
+          },
+        ],
+      },
+    };
+  }
   if (input.attachment) {
     const { name, mime, data } = input.attachment;
     const buffer = Buffer.from(data, "base64");
@@ -24,15 +40,30 @@ export async function sendMessage(user: string, input: SendInput) {
       throw Object.assign(new Error("O anexo deve ter no máximo 16 MB."), {
         statusCode: 400,
       });
-    content =
-      mime === "image/webp"
+    const audio = input.attachment.voiceNote
+      ? await convertVoiceNote(buffer)
+      : buffer;
+    content = input.attachment.asDocument
+      ? {
+          document: buffer,
+          mimetype: mime,
+          fileName: name,
+          caption: input.text || "",
+        }
+      : mime === "image/webp"
         ? { sticker: buffer, mimetype: mime }
         : mime.startsWith("image/")
           ? { image: buffer, caption: input.text || "", mimetype: mime }
           : mime.startsWith("video/")
             ? { video: buffer, caption: input.text || "", mimetype: mime }
             : mime.startsWith("audio/")
-              ? { audio: buffer, mimetype: mime }
+              ? {
+                  audio,
+                  mimetype: input.attachment.voiceNote
+                    ? "audio/ogg; codecs=opus"
+                    : mime,
+                  ptt: !!input.attachment.voiceNote,
+                }
               : {
                   document: buffer,
                   mimetype: mime,
@@ -129,7 +160,9 @@ export async function deleteMessage(
       );
     if (!canDeleteForEveryone(true, Number(previous.messageTimestamp) * 1000))
       throw Object.assign(
-        new Error("O prazo de dois dias para excluir esta mensagem para todos terminou."),
+        new Error(
+          "O prazo de dois dias para excluir esta mensagem para todos terminou.",
+        ),
         { statusCode: 400 },
       );
     const result = await connectedSocket(user).sendMessage(chatId, {
@@ -165,8 +198,7 @@ export async function media(user: string, id: string) {
     content?.stickerMessage;
   if (!attachment)
     throw Object.assign(new Error("Mensagem sem anexo."), { statusCode: 400 });
-  if (attachment.url === "https://a.whatsapp.net")
-    attachment.url = null;
+  if (attachment.url === "https://a.whatsapp.net") attachment.url = null;
   const stream = await downloadMediaMessage(
     message,
     "stream",

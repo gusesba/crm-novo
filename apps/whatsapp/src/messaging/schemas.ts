@@ -4,15 +4,37 @@ export const attachmentSchema = z.object({
   mime: z.string().max(120),
   data: z.string().max(22_400_000),
 });
+const contactSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  phone: z.string().regex(/^\d{12,15}$/),
+});
 export const sendSchema = z
   .object({
     chatId: z.string().regex(/^\d{12,15}@s\.whatsapp\.net$/),
     text: z.string().max(10000).nullish(),
-    attachment: attachmentSchema.nullish(),
+    attachment: attachmentSchema
+      .extend({
+        voiceNote: z.boolean().optional(),
+        asDocument: z.boolean().optional(),
+      })
+      .nullish(),
+    contact: contactSchema.nullish(),
     replyTo: z.string().max(200).nullish(),
   })
-  .refine((x) => !!x.text?.trim() || !!x.attachment, {
-    message: "Escreva uma mensagem ou selecione um anexo.",
+  .refine((x) => !!x.text?.trim() || !!x.attachment || !!x.contact, {
+    message: "Escreva uma mensagem ou selecione um anexo ou contato.",
+  })
+  .refine((x) => !x.contact || (!x.text?.trim() && !x.attachment), {
+    message: "Envie o contato sem texto ou outro anexo.",
+  })
+  .refine(
+    (x) => !x.attachment?.voiceNote || x.attachment.mime.startsWith("audio/"),
+    {
+      message: "Mensagem de voz precisa conter áudio.",
+    },
+  )
+  .refine((x) => !x.attachment?.voiceNote || !x.attachment.asDocument, {
+    message: "Mensagem de voz não pode ser enviada como documento.",
   });
 export const chatIdSchema = z.string().regex(/^\d{12,15}@s\.whatsapp\.net$/);
 export const reactionSchema = z.object({

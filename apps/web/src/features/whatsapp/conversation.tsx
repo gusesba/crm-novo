@@ -1,5 +1,5 @@
 "use client";
-import { Empty, ErrorBox, Loading } from "@/components/ui";
+import { Avatar, Empty, ErrorBox, Loading } from "@/components/ui";
 import { useResource } from "@/hooks/use-resource";
 import { api, post } from "@/lib/api";
 import { date, time } from "@/lib/format";
@@ -63,7 +63,9 @@ export function Conversation({
       body: JSON.stringify({ chatId, forEveryone }),
     });
     if (forEveryone) {
-      setNotice("Solicitação enviada ao WhatsApp. A mensagem permanece até o WhatsApp informar a revogação.");
+      setNotice(
+        "Solicitação enviada ao WhatsApp. A mensagem permanece até o WhatsApp informar a revogação.",
+      );
     } else {
       setOlder((items) => items.filter((item) => item.id !== message.id));
       if (reply?.id === message.id) setReply(undefined);
@@ -121,7 +123,18 @@ export function Conversation({
                   onError={setError}
                 />
               )}
-              {!!m.text && m.kind !== "sticker" && (
+              {m.contact && (
+                <div className="message-contact-card">
+                  <Avatar name={m.contact.name} small />
+                  <span>
+                    <strong>{m.contact.name}</strong>
+                    <small>
+                      {m.contact.phone || "Telefone não disponível"}
+                    </small>
+                  </span>
+                </div>
+              )}
+              {!!m.text && m.kind !== "sticker" && !m.contact && (
                 <div className="message-text">{m.text}</div>
               )}
               <div className="message-meta">
@@ -162,6 +175,7 @@ export function Conversation({
         <MessageComposer
           key={editing?.id || "new"}
           chatId={chatId}
+          chats={chats}
           reply={reply}
           editing={editing}
           clearSelection={() => {

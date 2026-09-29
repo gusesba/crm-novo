@@ -67,6 +67,78 @@ test("mensagens individuais não aceitam grupos ou identificadores arbitrários"
     false,
   );
 });
+test("contato e áudio de voz exigem dados válidos", () => {
+  const chatId = "5551999999999@s.whatsapp.net";
+  assert.equal(
+    sendSchema.safeParse({
+      chatId,
+      contact: { name: "Ana", phone: "5551999999999" },
+    }).success,
+    true,
+  );
+  assert.equal(
+    sendSchema.safeParse({ chatId, contact: { name: "Ana", phone: "123" } })
+      .success,
+    false,
+  );
+  assert.equal(
+    sendSchema.safeParse({
+      chatId,
+      text: "Oi",
+      contact: { name: "Ana", phone: "5551999999999" },
+    }).success,
+    false,
+  );
+  assert.equal(
+    sendSchema.safeParse({
+      chatId,
+      attachment: {
+        name: "voz",
+        mime: "audio/webm",
+        data: "AAAA",
+        voiceNote: true,
+      },
+    }).success,
+    true,
+  );
+  assert.equal(
+    sendSchema.safeParse({
+      chatId,
+      attachment: {
+        name: "foto",
+        mime: "image/png",
+        data: "AAAA",
+        voiceNote: true,
+      },
+    }).success,
+    false,
+  );
+  assert.equal(
+    sendSchema.safeParse({
+      chatId,
+      attachment: {
+        name: "foto.png",
+        mime: "image/png",
+        data: "AAAA",
+        asDocument: true,
+      },
+    }).success,
+    true,
+  );
+  assert.equal(
+    sendSchema.safeParse({
+      chatId,
+      attachment: {
+        name: "voz",
+        mime: "audio/webm",
+        data: "AAAA",
+        voiceNote: true,
+        asDocument: true,
+      },
+    }).success,
+    false,
+  );
+});
 test("lotes são limitados a 500 contatos", () => {
   assert.equal(
     campaignSchema.safeParse({

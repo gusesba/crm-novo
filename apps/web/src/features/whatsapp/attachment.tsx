@@ -10,26 +10,6 @@ export function AttachmentPicker({
   onChange: (file?: Attachment) => void;
   onError: (message: string) => void;
 }) {
-  async function read(file?: File) {
-    if (!file) return;
-    if (file.size > 16 * 1024 * 1024) {
-      onError("O anexo deve ter no máximo 16 MB.");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () =>
-      onChange({
-        name: file.name,
-        mime:
-          file.type ||
-          (file.name.toLowerCase().endsWith(".webp")
-            ? "image/webp"
-            : "application/octet-stream"),
-        data: String(reader.result).split(",")[1],
-      });
-    reader.onerror = () => onError("Não foi possível ler o arquivo.");
-    reader.readAsDataURL(file);
-  }
   return value ? (
     <div className="attachment-tag">
       <Paperclip size={14} />
@@ -46,7 +26,37 @@ export function AttachmentPicker({
     <label className="file-label">
       <Paperclip size={16} />
       Adicionar anexo · até 16 MB
-      <input type="file" onChange={(e) => void read(e.target.files?.[0])} />
+      <input
+        type="file"
+        onChange={(e) => readAttachment(e.target.files?.[0], onChange, onError)}
+      />
     </label>
   );
+}
+
+export function readAttachment(
+  file: File | undefined,
+  onChange: (file: Attachment) => void,
+  onError: (message: string) => void,
+  asDocument = false,
+) {
+  if (!file) return;
+  if (file.size > 16 * 1024 * 1024) {
+    onError("O anexo deve ter no máximo 16 MB.");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () =>
+    onChange({
+      name: file.name,
+      mime:
+        file.type ||
+        (file.name.toLowerCase().endsWith(".webp")
+          ? "image/webp"
+          : "application/octet-stream"),
+      data: String(reader.result).split(",")[1],
+      ...(asDocument ? { asDocument: true } : {}),
+    });
+  reader.onerror = () => onError("Não foi possível ler o arquivo.");
+  reader.readAsDataURL(file);
 }

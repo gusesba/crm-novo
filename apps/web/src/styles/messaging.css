@@ -151,6 +151,24 @@
   overflow-wrap: anywhere;
   color: #53674c;
 }
+.message-contact-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 220px;
+  padding: 5px 0;
+}
+.message-contact-card span {
+  display: grid;
+  gap: 3px;
+}
+.message-contact-card strong {
+  font-size: 12px;
+}
+.message-contact-card small {
+  font-size: 10px;
+  color: var(--muted);
+}
 .message-attachment {
   width: min(310px, 62vw);
   margin: -6px -8px 7px;
@@ -459,6 +477,9 @@
   border: 1px solid var(--line);
   border-radius: 9px;
 }
+.contact-chat-list {
+  max-height: 180px;
+}
 .forward-chat-list > button {
   width: 100%;
   display: flex;
@@ -499,8 +520,74 @@
   gap: 9px;
   align-items: flex-end;
 }
+.composer-add {
+  position: relative;
+  flex: none;
+}
+.composer-add-toggle,
+.composer-mic {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: 50%;
+  color: #52765d;
+}
+.composer-add-toggle:hover,
+.composer-add-toggle[aria-expanded="true"],
+.composer-mic:hover {
+  background: #eaf1e9;
+}
+.composer-add-toggle:disabled,
+.composer-mic:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.composer-add-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  z-index: 20;
+  width: 205px;
+  padding: 7px;
+  border-radius: 12px;
+  background: #202522;
+  box-shadow: 0 10px 28px rgba(18, 38, 25, 0.25);
+}
+.composer-add-menu button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 11px;
+  border-radius: 7px;
+  color: #f6f8f5;
+  font-size: 12px;
+  text-align: left;
+}
+.composer-add-menu button:hover,
+.composer-add-menu button:focus-visible {
+  background: #343c36;
+}
+.composer-add-document {
+  color: #9d69ff;
+}
+.composer-add-media {
+  color: #46a9ff;
+}
+.composer-add-audio {
+  color: #ff8c55;
+}
+.composer-add-contact {
+  color: #48b8e1;
+}
+.composer-file-input {
+  display: none;
+}
 .composer-input textarea {
   resize: none;
+  min-width: 0;
   min-height: 42px;
   max-height: 120px;
   background: #fafcf9;
@@ -508,6 +595,43 @@
 }
 .composer-input .button {
   min-height: 42px;
+}
+.composer-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.composer-options .attachment-tag {
+  margin: 4px 0 9px;
+}
+.voice-recording {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  color: #a54b48;
+  font-size: 11px;
+  padding: 8px 0;
+}
+.voice-recording button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--primary);
+}
+.voice-preview {
+  height: 36px;
+  max-width: 100%;
+}
+.contact-manual {
+  display: grid;
+  gap: 9px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+.contact-manual strong {
+  font-size: 11px;
 }
 .reply-banner {
   display: flex;
