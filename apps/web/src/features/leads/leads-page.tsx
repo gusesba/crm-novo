@@ -240,6 +240,11 @@ export function LeadsPage({
       {(create || editing) && (
         <LeadForm
           lead={editing}
+          onDeleted={() => {
+            setEditing(undefined);
+            setSelected([]);
+            result.reload();
+          }}
           onClose={() => {
             setCreate(false);
             setEditing(undefined);

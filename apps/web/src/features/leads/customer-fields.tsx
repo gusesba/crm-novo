@@ -4,15 +4,18 @@ import type { Lead } from "@/lib/types";
 export function CustomerFields({
   lead,
   initial,
+  readOnly = false,
 }: {
   lead?: Lead;
   initial?: { name: string; phone: string };
+  readOnly?: boolean;
 }) {
   return (
     <div className="form-grid">
       <Field label="Nome completo *" wide>
         <input
           name="name"
+          readOnly={readOnly}
           defaultValue={lead?.name || initial?.name}
           required
           maxLength={160}
@@ -22,6 +25,7 @@ export function CustomerFields({
       <Field label="Contato principal *">
         <input
           name="phone"
+          readOnly={readOnly}
           type="tel"
           defaultValue={lead?.phone || initial?.phone}
           required
@@ -31,6 +35,7 @@ export function CustomerFields({
       <Field label="Telefone adicional">
         <input
           name="additionalPhone"
+          readOnly={readOnly}
           type="tel"
           defaultValue={lead?.additionalPhone || ""}
           placeholder="Outro número de contato"
@@ -39,6 +44,7 @@ export function CustomerFields({
       <Field label="E-mail">
         <input
           name="email"
+          readOnly={readOnly}
           type="email"
           defaultValue={lead?.email || ""}
           placeholder="cliente@email.com"
@@ -47,12 +53,14 @@ export function CustomerFields({
       <Field label="Data de nascimento">
         <input
           name="birthDate"
+          readOnly={readOnly}
           type="date"
           defaultValue={lead?.birthDate || ""}
         />
       </Field>
       <Field label="Gênero">
-        <select name="gender" defaultValue={lead?.gender || ""}>
+        {readOnly && <input type="hidden" name="gender" value={lead?.gender || ""} />}
+        <select name="gender" defaultValue={lead?.gender || ""} disabled={readOnly}>
           <option value="">Selecione</option>
           {["Masculino", "Feminino", "Outro", "Prefiro não informar"].map(
             (s) => (

@@ -30,6 +30,10 @@ public class LeadService(CrmDbContext db, CurrentUser current)
             current.EnsureEdit(lead);
             if (lead.Revision != r.Revision) throw new BusinessException("O lead foi alterado por outro usuário. Atualize a página.", 409);
             if (lead.BranchId != r.BranchId || lead.SellerId != r.SellerId) throw new BusinessException("Use a transferência para alterar o vendedor. A sede do cadastro não pode ser alterada.");
+            if (!current.IsAdmin && (lead.Name != r.Name.Trim() || lead.Phone != phone ||
+                (lead.AdditionalPhone ?? "") != (r.AdditionalPhone ?? "") || (lead.Email ?? "") != (r.Email ?? "") ||
+                lead.Gender != r.Gender || lead.BirthDate != r.BirthDate))
+                throw new BusinessException("Somente o administrador pode editar os dados de contato.", 403);
             if (lead.Phone != phone) { lead.ChatId = null; lead.ChatUserId = null; }
         }
         else

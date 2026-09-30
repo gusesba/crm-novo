@@ -1,9 +1,9 @@
 "use client";
 import { useApp } from "@/components/providers";
 import { ErrorBox, Field, Modal } from "@/components/ui";
-import { post, put } from "@/lib/api";
+import { api, post, put } from "@/lib/api";
 import type { Lead } from "@/lib/types";
-import { CalendarDays, Check, ContactRound, FileText } from "lucide-react";
+import { CalendarDays, Check, ContactRound, FileText, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { CommercialFields } from "./commercial-fields";
 import { CustomerFields } from "./customer-fields";
@@ -13,11 +13,13 @@ export function LeadForm({
   initial,
   onClose,
   onSaved,
+  onDeleted,
 }: {
   lead?: Lead;
   initial?: { name: string; phone: string };
   onClose: () => void;
   onSaved: (lead: Lead) => void;
+  onDeleted?: () => void;
 }) {
   const { user, catalog, notify } = useApp();
   const [branch, setBranch] = useState(
@@ -37,6 +39,21 @@ export function LeadForm({
       (u.active || u.id === lead?.sellerId) &&
       (u.branchId === Number(branch) || (u.isAdmin && !u.branchId)),
   );
+  async function remove() {
+    if (!lead || !user?.isAdmin || !window.confirm(`Excluir o lead ${lead.name}? Os retornos e vínculos com grupos também serão excluídos.`)) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/leads/${lead.id}`, { method: "DELETE" });
+      notify("Lead excluído.");
+      if (onDeleted) onDeleted();
+      else onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
@@ -88,7 +105,10 @@ export function LeadForm({
             <ContactRound size={18} />
             <h3>Informações do cliente</h3>
           </div>
-          <CustomerFields lead={lead} initial={initial} />
+          <CustomerFields lead={lead} initial={initial} readOnly={!!lead && !user.isAdmin} />
+          {lead && !user.isAdmin && (
+            <p className="form-note">Somente o administrador pode editar os dados de contato.</p>
+          )}
           <div className="form-section-title">
             <FileText size={18} />
             <h3>Atendimento e negociação</h3>
@@ -129,6 +149,12 @@ export function LeadForm({
           )}
         </fieldset>
         <div className="modal-footer">
+          {lead && user.isAdmin && (
+            <button type="button" className="button secondary" disabled={busy} onClick={remove}>
+              <Trash2 size={17} />
+              Excluir lead
+            </button>
+          )}
           {lead && lead.currentSellerId === user.id && lead.status !== "Não Enviar Mais" && !busy && (
             <LeadConversationButton lead={lead} />
           )}

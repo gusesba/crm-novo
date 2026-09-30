@@ -27,6 +27,13 @@ public class LeadsController(CrmDbContext db, CurrentUser current, LeadService s
     [HttpGet("{id:int}")] public Task<Lead> Get(int id) => service.Find(id);
     [HttpPost] public Task<Lead> Create(LeadRequest r) => service.Save(null, r);
     [HttpPut("{id:int}")] public Task<Lead> Update(int id, LeadRequest r) => service.Save(id, r);
+    [HttpDelete("{id:int}"), Authorize(Policy = "admin")]
+    public async Task<IActionResult> Delete(int id)
+    {
+        db.Leads.Remove(await service.Find(id));
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
     [HttpPost("transfer"), Authorize(Policy = "admin")]
     public async Task<IActionResult> Transfer(TransferRequest r) { await service.Transfer(r); return NoContent(); }
     [HttpPost("{id:int}/link")]
