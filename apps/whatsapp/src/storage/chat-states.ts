@@ -55,7 +55,7 @@ export function saveChatState(
     db.prepare(
       "UPDATE chat_states SET archived=? WHERE user_id=? AND id=?",
     ).run(chat.archived ? 1 : 0, user, id);
-  if ("pinned" in chat)
+  if (Object.hasOwn(chat, "pinned") && chat.pinned !== undefined)
     db.prepare(
       "UPDATE chat_states SET pinned_at=? WHERE user_id=? AND id=?",
     ).run(Number(chat.pinned || 0), user, id);
@@ -98,7 +98,7 @@ export async function backfillChatStates(
     .prepare(
       `SELECT
          (SELECT COUNT(*) FROM chats WHERE user_id=?) AS chats,
-         (SELECT COUNT(*) FROM service_state WHERE user_id=? AND key='chat-state-snapshot-v2') AS completed`,
+         (SELECT COUNT(*) FROM service_state WHERE user_id=? AND key='chat-state-snapshot-v3') AS completed`,
     )
     .get(user, user) as { chats: number; completed: number };
   if (!status.chats || status.completed) return;
@@ -109,7 +109,7 @@ export async function backfillChatStates(
   await socket.resyncAppState(["regular_low"], false);
   db.prepare("INSERT OR REPLACE INTO service_state VALUES(?,?,?)").run(
     user,
-    "chat-state-snapshot-v2",
+    "chat-state-snapshot-v3",
     new Date().toISOString(),
   );
 }

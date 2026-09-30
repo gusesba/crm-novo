@@ -400,6 +400,20 @@ test("revogação mantém mensagem apagada e remove conteúdo e reações", () =
   assert.equal(listChats(user)[0].lastText, "Mensagem apagada");
 });
 
+test("histórico protobuf sem fixação não desfaz uma conversa fixada", () => {
+  const user = "pin-protobuf";
+  saveMessage(user, message("pin-protobuf-message"));
+  saveChatState(user, { id: chat, pinned: 123 });
+  const partial = proto.Conversation.create({ id: chat });
+  assert.equal("pinned" in partial, true);
+  assert.equal(Object.hasOwn(partial, "pinned"), false);
+  saveChatState(user, partial);
+  saveChatState(user, { id: chat, pinned: undefined });
+  assert.equal((listChats(user) as { pinnedAt: number }[])[0].pinnedAt, 123);
+  saveChatState(user, { id: chat, pinned: null });
+  assert.equal((listChats(user) as { pinnedAt: number }[])[0].pinnedAt, 0);
+});
+
 test("marcar mensagem apagada preserva autoria, ordem e isolamento da conversa", () => {
   const user = "deleted-media";
   saveMessage(user, { ...message("media-target"), key: { id: "media-target", remoteJid: chat, fromMe: true }, message: { imageMessage: { caption: "Privado", mimetype: "image/png" } } });
