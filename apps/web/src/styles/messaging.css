@@ -64,7 +64,16 @@
 .chat-item.active {
   background: #f0f5f0;
 }
-.chat-item > div {
+.chat-item-select {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+.chat-item-select > div {
   min-width: 0;
   flex: 1;
 }
@@ -152,6 +161,26 @@
   gap: 8px;
   color: #66786d;
   font-style: italic;
+}
+.profile-photo-button {
+  display: flex;
+  flex-shrink: 0;
+  padding: 0;
+  border-radius: 50%;
+  cursor: zoom-in;
+}
+.profile-photo-viewer {
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.profile-photo-viewer > img {
+  display: block;
+  max-width: 100%;
+  max-height: 65dvh;
+  width: 420px;
+  object-fit: contain;
+  border-radius: 12px;
 }
 .message-deleted svg {
   flex-shrink: 0;
@@ -1155,6 +1184,27 @@
 }
 .text-button.danger {
   color: #a25c5c;
+}
+.campaign-saved-messages {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.campaign-saved-message {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+.campaign-saved-message > strong {
+  font-size: 10px;
+  color: var(--muted);
+}
+.campaign-saved-message .campaign-preview-bubble {
+  max-width: 100%;
+  margin: 0;
+}
+.campaign-saved-message .campaign-preview-bubble p {
+  overflow-wrap: anywhere;
 }
 .campaign-deliveries {
   margin: 16px -23px -21px;

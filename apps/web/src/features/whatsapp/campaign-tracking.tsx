@@ -3,7 +3,13 @@ import { Empty, ErrorBox, Loading } from "@/components/ui";
 import { useResource } from "@/hooks/use-resource";
 import { post } from "@/lib/api";
 import { date } from "@/lib/format";
-import type { Campaign, CampaignDelivery, PageResult } from "@/lib/types";
+import type {
+  Attachment,
+  Campaign,
+  CampaignDelivery,
+  PageResult,
+} from "@/lib/types";
+import { CampaignAttachmentPreview } from "./campaign-message-sequence";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -148,7 +154,12 @@ export function CampaignTracking() {
                   </button>
                 )}
               </div>
-              {isExpanded && <CampaignDeliveryList campaignId={campaign.id} />}
+              {isExpanded && (
+                <>
+                  <CampaignPreparedMessages campaignId={campaign.id} />
+                  <CampaignDeliveryList campaignId={campaign.id} />
+                </>
+              )}
             </article>
           );
         })
@@ -160,6 +171,44 @@ export function CampaignTracking() {
         noun="disparos"
         onPage={setPage}
       />
+    </section>
+  );
+}
+
+function CampaignPreparedMessages({ campaignId }: { campaignId: string }) {
+  const result = useResource<
+    { text?: string | null; attachment?: Attachment | null }[]
+  >(`/whatsapp/campaigns/${campaignId}/messages`);
+  return (
+    <section
+      className="campaign-saved-messages"
+      aria-label="Mensagens do disparo"
+    >
+      <strong>Mensagens preparadas para envio</strong>
+      {result.error && (
+        <ErrorBox message={result.error} retry={result.reload} />
+      )}
+      {result.loading ? (
+        <Loading />
+      ) : !result.data?.length ? (
+        <p className="campaign-deliveries-empty">
+          Nenhuma mensagem registrada neste disparo.
+        </p>
+      ) : (
+        result.data.map((message, index) => (
+          <div className="campaign-saved-message" key={index}>
+            <strong>Mensagem {index + 1}</strong>
+            <div
+              className={`campaign-preview-bubble ${message.attachment?.mime === "image/webp" ? "sticker" : ""}`}
+            >
+              {message.attachment && (
+                <CampaignAttachmentPreview attachment={message.attachment} />
+              )}
+              {message.text && <p>{message.text}</p>}
+            </div>
+          </div>
+        ))
+      )}
     </section>
   );
 }

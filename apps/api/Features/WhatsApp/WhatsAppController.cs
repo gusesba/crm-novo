@@ -93,6 +93,9 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
         [Range(1, 100)] int pageSize = 10, string? status = null) =>
         client.Send(current.Id, HttpMethod.Get,
             $"campaigns/{Uri.EscapeDataString(id)}/deliveries?page={page}&pageSize={pageSize}{(status != null ? "&status=" + Uri.EscapeDataString(status) : "")}");
+    [HttpGet("campaigns/{id}/messages")]
+    public Task<JsonElement> CampaignMessages(string id) =>
+        client.Send(current.Id, HttpMethod.Get, $"campaigns/{Uri.EscapeDataString(id)}/messages");
     [HttpPost("campaigns"), RequestSizeLimit(24_000_000)]
     public async Task<JsonElement> Campaign(CampaignRequest r)
     {

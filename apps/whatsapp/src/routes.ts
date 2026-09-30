@@ -23,6 +23,7 @@ import { profilePicture } from "./messaging/profile-picture.js";
 import { listChats } from "./storage/chat-states.js";
 import {
   campaignDeliveries,
+  campaignMessages,
   campaigns,
   cancelCampaign,
   createCampaign,
@@ -130,6 +131,10 @@ export async function registerRoutes(app: FastifyInstance) {
       })
       .parse(req.query);
     return campaigns(params.parse(req.params).user, query.page, query.pageSize);
+  });
+  app.get("/sessions/:user/campaigns/:id/messages", async (req) => {
+    const { user, id } = params.parse(req.params);
+    return campaignMessages(user, id!);
   });
   app.get("/sessions/:user/campaigns/:id/deliveries", async (req) => {
     const { user, id } = params.parse(req.params);

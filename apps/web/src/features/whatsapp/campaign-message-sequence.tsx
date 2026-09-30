@@ -200,7 +200,7 @@ function CampaignPreview({ messages }: { messages: CampaignMessageDraft[] }) {
   );
 }
 
-function CampaignAttachmentPreview({ attachment }: { attachment: Attachment }) {
+export function CampaignAttachmentPreview({ attachment }: { attachment: Attachment }) {
   const source = `data:${attachment.mime};base64,${attachment.data}`;
   if (attachment.mime === "image/webp")
     return (

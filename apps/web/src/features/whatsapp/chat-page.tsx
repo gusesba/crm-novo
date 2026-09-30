@@ -17,6 +17,8 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
   const params = useSearchParams();
   const [historyUser, setHistoryUser] = useState("");
   const [chat, setChat] = useState<Chat>();
+  const [profilePhoto, setProfilePhoto] = useState<{ name: string; src: string }>();
+  const [photoFailed, setPhotoFailed] = useState(false);
   const [search, setSearch] = useState("");
   const [create, setCreate] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead>();
@@ -27,6 +29,13 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
     `/api/whatsapp/profile-picture?chatId=${encodeURIComponent(chatId)}${
       backup && historyUser ? `&userId=${historyUser}` : ""
     }`;
+  function openProfilePhoto(contact: Chat) {
+    setPhotoFailed(false);
+    setProfilePhoto({
+      name: contact.name.split("@")[0],
+      src: pictureUrl(contact.id),
+    });
+  }
   const chats = useResource<Chat[]>(`/whatsapp/chats${suffix}`, 5000);
   const leadMatch = useResource<PageResult<Lead>>(
     chat && !backup && chat.id.endsWith("@s.whatsapp.net")
@@ -193,6 +202,7 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
                 selected={chat?.id}
                 pictureUrl={pictureUrl}
                 onSelect={setChat}
+                onOpenPhoto={openProfilePhoto}
               />
             )}
           </div>
@@ -200,7 +210,14 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
         {chat ? (
           <div className="chat-main">
             <div className="chat-top">
-              <Avatar name={chat.name} src={pictureUrl(chat.id)} eager />
+              <button
+                type="button"
+                className="profile-photo-button"
+                aria-label={`Abrir foto de perfil de ${chat.name}`}
+                onClick={() => openProfilePhoto(chat)}
+              >
+                <Avatar name={chat.name} src={pictureUrl(chat.id)} eager />
+              </button>
               <div>
                 <h3>{linkedLead?.name || chat.name.split("@")[0]}</h3>
                 <p>
@@ -260,6 +277,27 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
           </div>
         )}
       </section>
+      {profilePhoto && (
+        <Modal
+          title={`Foto de perfil · ${profilePhoto.name}`}
+          onClose={() => setProfilePhoto(undefined)}
+        >
+          <div className="profile-photo-viewer">
+            {photoFailed ? (
+              <Empty
+                title="Foto de perfil indisponível"
+                description="Este contato não possui uma foto disponível para visualização."
+              />
+            ) : (
+              <img
+                src={profilePhoto.src}
+                alt={`Foto de perfil de ${profilePhoto.name}`}
+                onError={() => setPhotoFailed(true)}
+              />
+            )}
+          </div>
+        </Modal>
+      )}
       {phoneVariant && (
         <Modal title="Número alternativo encontrado" onClose={() => setPhoneVariant(undefined)}>
           <div className="modal-form">

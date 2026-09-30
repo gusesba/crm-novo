@@ -10,27 +10,40 @@ type Props = {
   selected?: string;
   pictureUrl: (chatId: string) => string;
   onSelect: (chat: Chat) => void;
+  onOpenPhoto: (chat: Chat) => void;
 };
 
 type ItemProps = Omit<Props, "chats" | "search"> & { chat: Chat };
 
-function ChatItem({ chat, selected, pictureUrl, onSelect }: ItemProps) {
+function ChatItem({ chat, selected, pictureUrl, onSelect, onOpenPhoto }: ItemProps) {
   const name = chat.name.includes("@") ? chat.name.split("@")[0] : chat.name;
   return (
-    <button
+    <div
       className={`chat-item ${selected === chat.id ? "active" : ""}`}
-      onClick={() => onSelect(chat)}
     >
-      <Avatar name={name} src={pictureUrl(chat.id)} />
-      <div>
-        <strong>{name}</strong>
-        <p>{chat.lastText}</p>
-      </div>
-      <span className="chat-item-meta">
-        {chat.pinnedAt > 0 && <Pin size={11} aria-label="Conversa fixada" />}
-        <small>{date(chat.updatedAt)}</small>
-      </span>
-    </button>
+      <button
+        type="button"
+        className="profile-photo-button"
+        aria-label={`Abrir foto de perfil de ${name}`}
+        onClick={() => onOpenPhoto(chat)}
+      >
+        <Avatar name={name} src={pictureUrl(chat.id)} />
+      </button>
+      <button
+        type="button"
+        className="chat-item-select"
+        onClick={() => onSelect(chat)}
+      >
+        <div>
+          <strong>{name}</strong>
+          <p>{chat.lastText}</p>
+        </div>
+        <span className="chat-item-meta">
+          {chat.pinnedAt > 0 && <Pin size={11} aria-label="Conversa fixada" />}
+          <small>{date(chat.updatedAt)}</small>
+        </span>
+      </button>
+    </div>
   );
 }
 

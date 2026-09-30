@@ -11,6 +11,17 @@ import { sendToPhone } from "./send-to-phone.js";
 const controllers = new Map<string, AbortController>();
 const running = new Map<string, Promise<void>>();
 const activeUsers = new Set<string>();
+export function campaignMessages(user: string, id: string) {
+  const campaign = db
+    .prepare("SELECT payload FROM campaigns WHERE user_id=? AND id=?")
+    .get(user, id) as { payload: string } | undefined;
+  if (!campaign)
+    throw Object.assign(new Error("Disparo não encontrado."), { statusCode: 404 });
+  const payload = JSON.parse(campaign.payload) as CampaignInput & CampaignInput["messages"][number];
+  return payload.messages || (payload.text || payload.attachment
+    ? [{ text: payload.text, attachment: payload.attachment }]
+    : []);
+}
 export function campaigns(user: string, page: number, pageSize: number) {
   const total = (
     db
