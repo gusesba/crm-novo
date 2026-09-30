@@ -39,7 +39,7 @@ export function DeleteMessageModal({
         <p className="form-note">
           Excluir para mim remove a mensagem somente desta conversa no CRM.
           {message.canDeleteForEveryone
-            ? " Excluir para todos solicita a exclusão no WhatsApp. A mensagem só sai do CRM quando o WhatsApp informar a revogação."
+            ? " Excluir para todos apaga o conteúdo no WhatsApp e mantém a indicação de mensagem apagada no histórico."
             : ""}
         </p>
         <div className="modal-footer delete-message-actions">

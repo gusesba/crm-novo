@@ -9,6 +9,7 @@ import { connectedSocket } from "../sessions/manager.js";
 import {
   canDeleteForEveryone,
   deleteStoredMessage,
+  markMessageDeleted,
   messageChatId,
   rawMessage,
   saveMessage,
@@ -151,6 +152,13 @@ export async function deleteMessage(
   chatId: string,
   forEveryone: boolean,
 ) {
+  if (!forEveryone) {
+    if (!deleteStoredMessage(user, id, chatId))
+      throw Object.assign(new Error("Mensagem não encontrada nesta conversa."), {
+        statusCode: 404,
+      });
+    return { deleted: true, forEveryone: false };
+  }
   const previous = conversationMessage(user, id, chatId);
   if (forEveryone) {
     if (!previous.key.fromMe)
@@ -168,12 +176,11 @@ export async function deleteMessage(
     const result = await connectedSocket(user).sendMessage(chatId, {
       delete: previous.key,
     });
+    markMessageDeleted(user, id, chatId);
     if (!result?.key.id)
       throw new Error("O WhatsApp não confirmou o envio da solicitação.");
     return { requested: true, forEveryone: true };
   }
-  deleteStoredMessage(user, id, chatId);
-  return { deleted: true, forEveryone: false };
 }
 function conversationMessage(user: string, id: string, chatId: string) {
   const message = rawMessage(user, id);

@@ -9,6 +9,7 @@ import { sqliteAuth } from "../storage/auth.js";
 import { db } from "../storage/database.js";
 import {
   deleteStoredMessage,
+  markMessageDeleted,
   messageChatId,
   rawMessage,
   saveMessage,
@@ -156,7 +157,7 @@ export async function connect(user: string) {
       ) {
         const previous = rawMessage(user, key.id);
         const chatId = previous && messageChatId(previous);
-        if (chatId) deleteStoredMessage(user, key.id, chatId);
+        if (chatId) markMessageDeleted(user, key.id, chatId);
         continue;
       }
       if (key.id && update.message) {

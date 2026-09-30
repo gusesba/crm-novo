@@ -14,6 +14,9 @@ const {
   listMessages,
   listRecentStickers,
   rawMessage,
+  markMessageDeleted,
+  deleteStoredMessage,
+  saveMessageReaction,
 } = await import("../src/storage/messages.js");
 const { listChats, saveChatState } =
   await import("../src/storage/chat-states.js");
@@ -367,9 +370,11 @@ test("reações são atualizadas e removidas sem criar novas mensagens", () => {
   messages = listMessages(user, chat);
   assert.deepEqual(messages[0].reactions, []);
 });
-test("revogação remove a mensagem e suas reações do histórico", () => {
+test("revogação mantém mensagem apagada e remove conteúdo e reações", () => {
   const user = "11";
-  saveMessage(user, message("delete-target", "Mensagem apagada"));
+  const original = message("delete-target", "Conteúdo original");
+  saveMessage(user, original);
+  saveMessageReaction(user, "delete-target", "me", "👍");
   saveMessage(user, {
     ...message("delete-event"),
     message: {
@@ -379,5 +384,54 @@ test("revogação remove a mensagem e suas reações do histórico", () => {
       },
     },
   });
+  const messages = listMessages(user, chat);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].id, "delete-target");
+  assert.equal(messages[0].text, "Mensagem apagada");
+  assert.equal(messages[0].kind, "deleted");
+  assert.equal(messages[0].timestamp, 100000);
+  assert.equal(messages[0].canDeleteForEveryone, false);
+  assert.deepEqual(messages[0].reactions, []);
+  assert.equal(rawMessage(user, "delete-target"), undefined);
+  saveMessage(user, original);
+  saveMessageReaction(user, "delete-target", "me", "❤️");
+  assert.equal(listMessages(user, chat)[0].kind, "deleted");
+  assert.deepEqual(listMessages(user, chat)[0].reactions, []);
+  assert.equal(listChats(user)[0].lastText, "Mensagem apagada");
+});
+
+test("marcar mensagem apagada preserva autoria, ordem e isolamento da conversa", () => {
+  const user = "deleted-media";
+  saveMessage(user, { ...message("media-target"), key: { id: "media-target", remoteJid: chat, fromMe: true }, message: { imageMessage: { caption: "Privado", mimetype: "image/png" } } });
+  assert.equal(markMessageDeleted(user, "media-target", "outro@s.whatsapp.net"), false);
+  assert.equal(markMessageDeleted("outro", "media-target", chat), false);
+  assert.equal(markMessageDeleted(user, "media-target", chat), true);
+  assert.equal(markMessageDeleted(user, "media-target", chat), false);
+  const stored = listMessages(user, chat)[0];
+  assert.equal(stored.mine, 1);
+  assert.equal(stored.kind, "deleted");
+  assert.equal(stored.attachment, undefined);
+  assert.equal(stored.contact, undefined);
+  assert.equal(stored.canDeleteForEveryone, false);
+});
+
+test("excluir para mim continua removendo a mensagem completamente", () => {
+  const user = "delete-local";
+  saveMessage(user, message("local-target"));
+  assert.equal(deleteStoredMessage(user, "local-target", chat), true);
   assert.deepEqual(listMessages(user, chat), []);
+});
+
+test("excluir para mim permite remover o balão apagado e valida usuário e conversa", async () => {
+  const { deleteMessage } = await import("../src/messaging/send.js");
+  const user = "delete-tombstone";
+  saveMessage(user, message("deleted-target"));
+  markMessageDeleted(user, "deleted-target", chat);
+  await assert.rejects(deleteMessage("outro", "deleted-target", chat, false), { statusCode: 404 });
+  await assert.rejects(deleteMessage(user, "deleted-target", "outra-conversa@s.whatsapp.net", false), { statusCode: 404 });
+  await assert.rejects(deleteMessage(user, "deleted-target", chat, true), { statusCode: 404 });
+  assert.equal(listMessages(user, chat)[0].kind, "deleted");
+  assert.deepEqual(await deleteMessage(user, "deleted-target", chat, false), { deleted: true, forEveryone: false });
+  assert.deepEqual(listMessages(user, chat), []);
+  assert.equal(listChats(user)[0].lastText, "");
 });

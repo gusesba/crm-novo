@@ -151,15 +151,19 @@ export function MessageActionsMenu({
               </div>
             ) : (
               <>
-                <button role="menuitem" onClick={() => select(onReply)}>
-                  <Reply size={15} /> Responder
-                </button>
-                <button role="menuitem" onClick={() => setShowReactions(true)}>
-                  <SmilePlus size={15} /> Reagir
-                </button>
-                <button role="menuitem" onClick={() => select(onForward)}>
-                  <Forward size={15} /> Encaminhar
-                </button>
+                {message.kind !== "deleted" && (
+                  <>
+                    <button role="menuitem" onClick={() => select(onReply)}>
+                      <Reply size={15} /> Responder
+                    </button>
+                    <button role="menuitem" onClick={() => setShowReactions(true)}>
+                      <SmilePlus size={15} /> Reagir
+                    </button>
+                    <button role="menuitem" onClick={() => select(onForward)}>
+                      <Forward size={15} /> Encaminhar
+                    </button>
+                  </>
+                )}
                 {!!message.mine && message.kind === "text" && (
                   <button role="menuitem" onClick={() => select(onEdit)}>
                     <Pencil size={15} /> Editar
@@ -170,7 +174,7 @@ export function MessageActionsMenu({
                   className="danger"
                   onClick={() => select(onDelete)}
                 >
-                  <Trash2 size={15} /> Excluir
+                  <Trash2 size={15} /> {message.kind === "deleted" ? "Excluir para mim" : "Excluir"}
                 </button>
               </>
             )}

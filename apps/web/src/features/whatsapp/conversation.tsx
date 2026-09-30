@@ -4,6 +4,7 @@ import { useResource } from "@/hooks/use-resource";
 import { api, post } from "@/lib/api";
 import { date, time } from "@/lib/format";
 import type { Chat, Message, SharedContact } from "@/lib/types";
+import { Ban } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { MessageComposer } from "./message-composer";
 import { ForwardMessageModal } from "./forward-message-modal";
@@ -66,14 +67,25 @@ export function Conversation({
       body: JSON.stringify({ chatId, forEveryone }),
     });
     if (forEveryone) {
-      setNotice(
-        "Solicitação enviada ao WhatsApp. A mensagem permanece até o WhatsApp informar a revogação.",
+      setOlder((items) =>
+        items.map((item) => item.id === message.id
+          ? {
+              ...item,
+              kind: "deleted",
+              text: "Mensagem apagada",
+              attachment: undefined,
+              contact: undefined,
+              reactions: [],
+              canDeleteForEveryone: false,
+            }
+          : item),
       );
+      setNotice("A mensagem foi apagada para todos.");
     } else {
       setOlder((items) => items.filter((item) => item.id !== message.id));
-      if (reply?.id === message.id) setReply(undefined);
-      if (editing?.id === message.id) setEditing(undefined);
     }
+    if (reply?.id === message.id) setReply(undefined);
+    if (editing?.id === message.id) setEditing(undefined);
     result.reload();
   }
   const messages = [...older, ...(result.data || [])].filter(
@@ -119,7 +131,13 @@ export function Conversation({
                   onDelete={() => setDeleting(m)}
                 />
               )}
-              {m.kind !== "text" && !m.contact && (
+              {m.kind === "deleted" && (
+                <div className="message-deleted">
+                  <Ban size={16} />
+                  <span>Mensagem apagada</span>
+                </div>
+              )}
+              {m.kind !== "text" && m.kind !== "deleted" && !m.contact && (
                 <MessageAttachment
                   message={m}
                   userId={userId}
@@ -135,7 +153,7 @@ export function Conversation({
                   <strong>{m.contact.name}</strong>
                 </div>
               )}
-              {!!m.text && m.kind !== "sticker" && !m.contact && (
+              {!!m.text && m.kind !== "sticker" && m.kind !== "deleted" && !m.contact && (
                 <MessageText
                   text={m.text}
                   onStartConversation={backup ? undefined : onStartConversation}

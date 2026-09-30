@@ -34,7 +34,7 @@ export function saveMessage(user: string, msg: WAMessage) {
       proto.Message.ProtocolMessage.Type.REVOKE &&
     content.protocolMessage.key?.id
   ) {
-    deleteStoredMessage(user, content.protocolMessage.key.id, jid);
+    markMessageDeleted(user, content.protocolMessage.key.id, jid);
     return;
   }
   if (content.protocolMessage || content.senderKeyDistributionMessage) return;
@@ -72,9 +72,9 @@ export function saveMessage(user: string, msg: WAMessage) {
     if (sender) savePushName(user, sender, msg.pushName);
   }
   const name = conversationName(user, jid) || jid;
-  db.prepare(
+  const saved = db.prepare(
     `INSERT INTO messages VALUES(?,?,?,?,?,?,?,?)
-    ON CONFLICT(user_id,id) DO UPDATE SET text=excluded.text,kind=excluded.kind,raw=excluded.raw`,
+    ON CONFLICT(user_id,id) DO UPDATE SET text=excluded.text,kind=excluded.kind,raw=excluded.raw WHERE messages.kind != 'deleted'`,
   ).run(
     user,
     msg.key.id,
@@ -85,6 +85,7 @@ export function saveMessage(user: string, msg: WAMessage) {
     timestamp,
     JSON.stringify(msg, BufferJSON.replacer),
   );
+  if (!saved.changes) return;
   db.prepare(
     `INSERT INTO chats VALUES(?,?,?,?,?) ON CONFLICT(user_id,id) DO UPDATE SET
     name=CASE WHEN excluded.name != excluded.id THEN excluded.name ELSE chats.name END,
@@ -112,7 +113,7 @@ export function canDeleteForEveryone(
 }
 export function rawMessage(user: string, id: string): WAMessage | undefined {
   const row = db
-    .prepare("SELECT raw FROM messages WHERE user_id=? AND id=?")
+    .prepare("SELECT raw FROM messages WHERE user_id=? AND id=? AND kind != 'deleted'")
     .get(user, id) as { raw: string } | undefined;
   return row ? JSON.parse(row.raw, BufferJSON.reviver) : undefined;
 }
@@ -182,7 +183,7 @@ export function listMessages(
     const kind = media?.kind || message.kind;
     return {
       ...message,
-      canDeleteForEveryone: canDeleteForEveryone(
+      canDeleteForEveryone: message.kind !== "deleted" && canDeleteForEveryone(
         !!message.mine,
         message.timestamp,
       ),
@@ -284,7 +285,7 @@ export function saveMessageReaction(
   emoji: string,
 ) {
   const target = db
-    .prepare("SELECT 1 FROM messages WHERE user_id=? AND id=?")
+    .prepare("SELECT 1 FROM messages WHERE user_id=? AND id=? AND kind != 'deleted'")
     .get(user, messageId);
   if (!target) return;
   if (emoji)
@@ -296,6 +297,32 @@ export function saveMessageReaction(
     db.prepare(
       "DELETE FROM message_reactions WHERE user_id=? AND message_id=? AND sender=?",
     ).run(user, messageId, sender);
+}
+
+export function markMessageDeleted(user: string, id: string, chatId: string) {
+  const original = rawMessage(user, id);
+  if (!original || messageChatId(original) !== chatId) return false;
+  const raw = JSON.stringify(
+    {
+      key: original.key,
+      messageTimestamp: original.messageTimestamp,
+      messageStubType: proto.WebMessageInfo.StubType.REVOKE,
+    },
+    BufferJSON.replacer,
+  );
+  db.prepare(
+    "UPDATE messages SET text='Mensagem apagada',kind='deleted',raw=? WHERE user_id=? AND id=? AND chat_id=?",
+  ).run(raw, user, id, chatId);
+  db.prepare(
+    "DELETE FROM message_reactions WHERE user_id=? AND message_id=?",
+  ).run(user, id);
+  const latest = db.prepare(
+    "SELECT text FROM messages WHERE user_id=? AND chat_id=? ORDER BY timestamp DESC,id DESC LIMIT 1",
+  ).get(user, chatId) as { text: string };
+  db.prepare(
+    "UPDATE chats SET last_text=? WHERE user_id=? AND id=?",
+  ).run(latest.text, user, chatId);
+  return true;
 }
 
 export function deleteStoredMessage(user: string, id: string, chatId: string) {

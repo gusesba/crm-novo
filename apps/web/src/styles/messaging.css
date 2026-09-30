@@ -146,6 +146,16 @@
   border-color: #d9e5d3;
   border-radius: 12px 0 12px 12px;
 }
+.message-deleted {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #66786d;
+  font-style: italic;
+}
+.message-deleted svg {
+  flex-shrink: 0;
+}
 .message-text {
   font-size: 12px;
   white-space: pre-wrap;
