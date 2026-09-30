@@ -851,6 +851,34 @@
 .campaign-form {
   padding: 22px;
 }
+.campaign-audience-table,
+.campaign-confirmation-table {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin: 12px 0;
+}
+.campaign-audience-table {
+  max-height: 350px;
+}
+.campaign-confirmation-table {
+  max-height: 55dvh;
+}
+.campaign-audience-table input,
+.campaign-confirmation-table input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--green);
+}
+.campaign-audience-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 11px;
+}
 .campaign-sequence {
   margin: 20px 0;
 }

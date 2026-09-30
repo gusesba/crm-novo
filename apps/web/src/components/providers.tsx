@@ -35,6 +35,10 @@ type Toast = {
   retry?: () => void;
 };
 const AppContext = createContext<Context | null>(null);
+function activeToastHost() {
+  const dialogs = document.querySelectorAll<HTMLDialogElement>("dialog[open]");
+  return dialogs.item(dialogs.length - 1) || document.body;
+}
 export function Providers({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [catalog, setCatalog] = useState<Catalog>();
@@ -71,9 +75,7 @@ export function Providers({ children }: { children: ReactNode }) {
   }, [refresh]);
   useEffect(() => {
     const updateHost = () => {
-      const dialogs =
-        document.querySelectorAll<HTMLDialogElement>("dialog[open]");
-      setToastHost(dialogs.item(dialogs.length - 1) || document.body);
+      setToastHost(activeToastHost());
     };
     updateHost();
     // Modal dialogs make everything outside them inert, including popovers.
@@ -86,11 +88,15 @@ export function Providers({ children }: { children: ReactNode }) {
     });
     return () => observer.disconnect();
   }, []);
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const host = activeToastHost();
+    if (toastHost !== host) {
+      setToastHost(host);
+      return;
+    }
     const stack = toastStack.current;
-    if (!stack) return;
-    stack.hidePopover();
-    stack.showPopover();
+    if (!stack?.isConnected) return;
+    if (!stack.matches(":popover-open")) stack.showPopover();
   }, [toasts, toastHost]);
   useLayoutEffect(() => {
     const cards =

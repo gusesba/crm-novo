@@ -6,6 +6,7 @@ import { connectedSocket } from "../sessions/manager.js";
 import { sendMessage } from "../messaging/send.js";
 import type { CampaignInput } from "../messaging/schemas.js";
 import { deliver } from "./deliver.js";
+import { sendToPhone } from "./send-to-phone.js";
 
 const controllers = new Map<string, AbortController>();
 const running = new Map<string, Promise<void>>();
@@ -108,6 +109,7 @@ async function run(
   input: CampaignInput,
   signal: AbortSignal,
 ) {
+  const destinations = new Map<number, string>();
   try {
     await deliver(input, signal, {
       eligible: async (recipient) => {
@@ -124,12 +126,25 @@ async function run(
           ((await response.json()) as { eligible: boolean }).eligible === true
         );
       },
-      send: (recipient, message) =>
-        sendMessage(user, {
-          chatId: `${recipient.phone}@s.whatsapp.net`,
-          text: message.text?.replaceAll("{{nome}}", recipient.name),
-          attachment: message.attachment,
-        }),
+      send: async (recipient, message) => {
+        const send = (chatId: string) =>
+          sendMessage(user, {
+            chatId,
+            text: message.text?.replaceAll("{{nome}}", recipient.name),
+            attachment: message.attachment,
+          });
+        const destination = destinations.get(recipient.leadId);
+        if (destination)
+          return { ...(await send(destination)), phone: destination.split("@")[0] };
+        const delivery = await sendToPhone(
+          recipient.phone,
+          (candidate) => connectedSocket(user).onWhatsApp(candidate),
+          send,
+          signal,
+        );
+        destinations.set(recipient.leadId, delivery.chatId);
+        return { ...delivery.result, phone: delivery.phone };
+      },
       record: (recipient, status, error, result) => {
         // status é uma união fechada controlada pelo worker, nunca entrada HTTP.
         db.prepare(`UPDATE campaigns SET ${status}=${status}+1 WHERE id=?`).run(
@@ -144,12 +159,17 @@ async function run(
           result && typeof result === "object" && "id" in result
             ? String(result.id)
             : null;
+        const deliveredPhone =
+          result && typeof result === "object" && "phone" in result
+            ? String(result.phone)
+            : destinations.get(recipient.leadId)?.split("@")[0] || recipient.phone;
         db.prepare(
-          "UPDATE campaign_deliveries SET status=?,error=?,external_message_id=?,updated_at=? WHERE campaign_id=? AND lead_id=?",
+          "UPDATE campaign_deliveries SET status=?,error=?,external_message_id=?,phone=?,updated_at=? WHERE campaign_id=? AND lead_id=?",
         ).run(
           status,
           message,
           externalMessageId,
+          deliveredPhone,
           Date.now(),
           id,
           recipient.leadId,

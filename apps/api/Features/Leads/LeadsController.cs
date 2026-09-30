@@ -14,7 +14,11 @@ public class LeadsController(CrmDbContext db, CurrentUser current, LeadService s
     public async Task<object> List(string? search, string? status, int? serviceId, int? sellerId, int? branchId, bool mine = false, bool sales = false, int page = 1, int pageSize = 20)
     {
         var query = current.Scope(db.Leads.AsNoTracking());
-        if (!string.IsNullOrWhiteSpace(search)) query = query.Where(x => x.Name.Contains(search) || x.Phone.Contains(search));
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.ToLowerInvariant();
+            query = query.Where(x => x.Name.ToLower().Contains(term) || x.Phone.Contains(term));
+        }
         if (status != null) query = query.Where(x => x.Status == status);
         if (sales) query = query.Where(x => x.Status == LeadStatuses.Won);
         if (mine) query = query.Where(x => x.CurrentSellerId == current.Id);

@@ -102,21 +102,56 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
             throw new BusinessException("Os anexos da sequência devem somar no máximo 16 MB.");
         if (r.IntervalVarianceSeconds > r.IntervalSeconds - 3)
             throw new BusinessException("A variação deve manter o intervalo mínimo em 3 segundos.");
-        var query = current.Scope(db.Leads).Where(x => x.CurrentSellerId == current.Id && x.Status != LeadStatuses.OptOut);
+        var audience = new CampaignAudienceRequest(r.LeadIds, r.GroupId, r.Status, r.ServiceId, r.SellerId, r.BranchId, r.Search, r.ExcludedLeadIds);
+        var leads = await SelectedCampaignLeads(audience);
+        var recipients = leads.Select(x => new { leadId = x.Id, phone = x.Phone, name = x.Name });
+        return await client.Send(current.Id, HttpMethod.Post, "campaigns", new { r.Name, r.Messages, r.IntervalSeconds, r.IntervalVarianceSeconds, r.PauseEvery, r.PauseSeconds, recipients });
+    }
+    [HttpPost("campaigns/{id}/cancel")]
+    public Task<JsonElement> Cancel(string id) => client.Send(current.Id, HttpMethod.Post, $"campaigns/{Uri.EscapeDataString(id)}/cancel");
+
+    [HttpGet("campaign-recipients")]
+    public async Task<object> CampaignRecipients(int? groupId, string? status, int? serviceId, int? sellerId, int? branchId,
+        string? search, [Range(1, int.MaxValue)] int page = 1, [Range(1, 100)] int pageSize = 20)
+    {
+        var query = await CampaignLeads(new CampaignAudienceRequest(null, groupId, status, serviceId, sellerId, branchId, search));
+        return new { items = await query.OrderBy(x => x.Name).ThenBy(x => x.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(), total = await query.CountAsync(), page, pageSize };
+    }
+    [HttpPost("campaigns/preview")]
+    public Task<List<Lead>> PreviewCampaign(CampaignAudienceRequest r) => SelectedCampaignLeads(r);
+
+    private async Task<IQueryable<Lead>> CampaignLeads(CampaignAudienceRequest r)
+    {
+        if (r.SellerId.HasValue && !current.IsAdmin) throw new BusinessException("Filtro de vendedor disponível apenas para administradores.", 403);
+        if (r.BranchId.HasValue && !(current.IsAdmin && current.BranchId == null)) throw new BusinessException("Filtro de sede disponível apenas para o administrador geral.", 403);
+        var query = current.Scope(db.Leads.AsNoTracking()).Where(x => x.Status != LeadStatuses.OptOut && db.Branches.Any(b => b.Id == x.BranchId && b.Active));
         if (r.LeadIds != null) query = query.Where(x => r.LeadIds.Contains(x.Id));
-        if (r.Status != null) query = query.Where(x => x.Status == r.Status);
+        if (r.ExcludedLeadIds != null) query = query.Where(x => !r.ExcludedLeadIds.Contains(x.Id));
+        if (!string.IsNullOrWhiteSpace(r.Status)) query = query.Where(x => x.Status == r.Status);
         if (r.ServiceId.HasValue) query = query.Where(x => x.ServiceId == r.ServiceId);
+        if (r.SellerId.HasValue) query = query.Where(x => x.CurrentSellerId == r.SellerId);
+        if (r.BranchId.HasValue) query = query.Where(x => x.BranchId == r.BranchId);
+        if (!string.IsNullOrWhiteSpace(r.Search))
+        {
+            var search = r.Search.ToLowerInvariant();
+            query = query.Where(x => x.Name.ToLower().Contains(search) || x.Phone.Contains(search));
+        }
         if (r.GroupId.HasValue)
         {
             if (!await db.Groups.AnyAsync(x => x.Id == r.GroupId && x.UserId == current.Id)) throw new BusinessException("Grupo não encontrado.", 404);
             query = query.Where(x => db.GroupMembers.Any(m => m.GroupId == r.GroupId && m.LeadId == x.Id));
         }
-        var recipients = await query.Select(x => new { leadId = x.Id, phone = x.Phone, name = x.Name }).Take(501).ToListAsync();
-        if (recipients.Count is 0 or > 500) throw new BusinessException("Selecione entre 1 e 500 destinatários elegíveis da sua carteira.");
-        return await client.Send(current.Id, HttpMethod.Post, "campaigns", new { r.Name, r.Messages, r.IntervalSeconds, r.IntervalVarianceSeconds, r.PauseEvery, r.PauseSeconds, recipients });
+        return query;
     }
-    [HttpPost("campaigns/{id}/cancel")]
-    public Task<JsonElement> Cancel(string id) => client.Send(current.Id, HttpMethod.Post, $"campaigns/{Uri.EscapeDataString(id)}/cancel");
+    private async Task<List<Lead>> SelectedCampaignLeads(CampaignAudienceRequest r)
+    {
+        var query = await CampaignLeads(r);
+        var leads = await query.OrderBy(x => x.Name).ThenBy(x => x.Id).Take(501).ToListAsync();
+        if (leads.Count is 0 or > 500) throw new BusinessException("Selecione entre 1 e 500 destinatários elegíveis.");
+        if (r.LeadIds != null && leads.Count != r.LeadIds.Distinct().Count())
+            throw new BusinessException("A seleção mudou ou contém leads fora dos filtros ou do seu escopo. Revise os destinatários.", 409);
+        return leads;
+    }
 
     private async Task<int> HistoryUser(int? id)
     {
@@ -147,4 +182,7 @@ public record CampaignMessageRequest([MaxLength(10000)] string? Text, Attachment
 public record CampaignRequest([Required, MaxLength(160)] string Name, CampaignMessageRequest[] Messages,
     int[]? LeadIds, int? GroupId, string? Status, int? ServiceId,
     [Range(3, 3600)] int IntervalSeconds = 10, [Range(0, 1800)] int IntervalVarianceSeconds = 3,
-    [Range(1, 500)] int PauseEvery = 20, [Range(0, 3600)] int PauseSeconds = 60);
+    [Range(1, 500)] int PauseEvery = 20, [Range(0, 3600)] int PauseSeconds = 60,
+    int? SellerId = null, int? BranchId = null, string? Search = null, int[]? ExcludedLeadIds = null);
+public record CampaignAudienceRequest(int[]? LeadIds = null, int? GroupId = null, string? Status = null, int? ServiceId = null,
+    int? SellerId = null, int? BranchId = null, string? Search = null, int[]? ExcludedLeadIds = null);

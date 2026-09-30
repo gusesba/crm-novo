@@ -17,7 +17,7 @@ public class EligibilityController(CrmDbContext db, IConfiguration configuration
         if (!CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(Request.Headers["x-service-key"].ToString()), Encoding.UTF8.GetBytes(secret))) return Unauthorized();
         var user = await db.Users.FindAsync(userId);
         var lead = await db.Leads.FindAsync(leadId);
-        var eligible = user is { Active: true } && lead != null && lead.CurrentSellerId == userId
+        var eligible = user is { Active: true } && lead != null
             && lead.Phone == phone && lead.Status != LeadStatuses.OptOut
             && (user.BranchId == lead.BranchId || (user.IsAdmin && user.BranchId == null))
             && await db.Branches.AnyAsync(x => x.Id == lead.BranchId && x.Active);

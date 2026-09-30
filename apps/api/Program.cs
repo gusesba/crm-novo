@@ -3,6 +3,7 @@ using Crm.Api.Features.Leads;
 using Crm.Api.Features.WhatsApp;
 using Crm.Api.Infrastructure;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,7 +14,13 @@ builder.Services.AddExceptionHandler<ExceptionHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<CurrentUser>();
 builder.Services.AddScoped<LeadService>();
-builder.Services.AddDbContext<CrmDbContext>(o => o.UseSqlite(builder.Configuration.GetConnectionString("Crm") ?? "Data Source=data/crm.db"));
+builder.Services.AddDbContext<CrmDbContext>(o =>
+{
+    var connection = new SqliteConnection(builder.Configuration.GetConnectionString("Crm") ?? "Data Source=data/crm.db");
+    // SQLite's built-in lower only converts ASCII; names also need accented letters.
+    connection.CreateFunction("lower", (string? value) => value?.ToLowerInvariant(), isDeterministic: true);
+    o.UseSqlite(connection, contextOwnsConnection: true);
+});
 builder.Services.AddCrmAuthentication(builder.Configuration, builder.Environment);
 builder.Services.AddHttpClient<WhatsAppClient>(client =>
 {
