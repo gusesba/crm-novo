@@ -215,6 +215,17 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
               userId={backup ? historyUser : undefined}
               backup={backup}
               chats={chats.data || []}
+              onStartConversation={(contact) => {
+                const id = contact.phone.replace(/\D/g, "") + "@s.whatsapp.net";
+                setChat(chats.data?.find((item) => item.id === id) || {
+                  id,
+                  name: contact.name,
+                  lastText: "",
+                  updatedAt: Date.now(),
+                  archived: false,
+                  pinnedAt: 0,
+                });
+              }}
             />
           </div>
         ) : (

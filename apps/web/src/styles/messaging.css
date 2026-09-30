@@ -152,23 +152,50 @@
   overflow-wrap: anywhere;
   color: #53674c;
 }
+.message.contact-message {
+  width: 333px;
+  flex-shrink: 0;
+  padding: 0;
+  overflow: hidden;
+}
 .message-contact-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-width: 220px;
-  padding: 5px 0;
+  gap: 15px;
+  padding: 11px 30px 0 15px;
 }
-.message-contact-card span {
-  display: grid;
-  gap: 3px;
+.message-contact-card .avatar {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
 }
 .message-contact-card strong {
-  font-size: 12px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
 }
-.message-contact-card small {
-  font-size: 10px;
+.contact-message .message-meta {
+  margin: 0;
+  padding: 0 15px 6px;
+  font-size: 11px;
+  color: #667781;
+}
+.message-contact-action {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  background: transparent;
+  color: #008069;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.message-contact-action:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.04);
+}
+.message-contact-action:disabled {
   color: var(--muted);
+  cursor: default;
 }
 .message-attachment {
   width: min(310px, 62vw);

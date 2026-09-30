@@ -84,6 +84,42 @@ public class LeadEditingTests
     }
 
     [Fact]
+    public async Task BranchAdminCanEditOtherSellersLeadsAndTransferChangesSellerEditingAccess()
+    {
+        using var factory = new ApiFactory();
+        using var global = await factory.Login();
+        using var original = await factory.Login("camila");
+        using var assigned = await factory.Login("rafael");
+        (await global.PostAsJsonAsync("/api/catalog/users", new
+        {
+            name = "Administrador da sede", username = "branch-admin", password = "ViaDemo2026!",
+            isAdmin = true, active = true, branchId = 1
+        })).EnsureSuccessStatusCode();
+        using var admin = await factory.Login("branch-admin");
+        var lead = await Create(original);
+        var request = Request(lead);
+        request.Name = "Contato atualizado pelo administrador da sede";
+        var updated = await admin.PutAsJsonAsync($"/api/leads/{lead.Id}", request);
+        updated.EnsureSuccessStatusCode();
+        lead = (await updated.Content.ReadFromJsonAsync<Lead>())!;
+        Assert.Equal(request.Name, lead.Name);
+        (await admin.PostAsJsonAsync("/api/leads/transfer", new
+        {
+            leadIds = new[] { lead.Id }, sellerId = 3, permanent = false
+        })).EnsureSuccessStatusCode();
+        lead = (await admin.GetFromJsonAsync<Lead>($"/api/leads/{lead.Id}"))!;
+        Assert.Equal(2, lead.SellerId);
+        Assert.Equal(3, lead.CurrentSellerId);
+        request = Request(lead);
+        request.Notes = "Atendimento pelo vendedor atual";
+        Assert.Equal(HttpStatusCode.Forbidden, (await original.PutAsJsonAsync($"/api/leads/{lead.Id}", request)).StatusCode);
+        updated = await assigned.PutAsJsonAsync($"/api/leads/{lead.Id}", request);
+        updated.EnsureSuccessStatusCode();
+        lead = (await updated.Content.ReadFromJsonAsync<Lead>())!;
+        Assert.Equal(request.Notes, lead.Notes);
+    }
+
+    [Fact]
     public async Task OnlyAdminCanDeleteLeadAndItsAppointments()
     {
         using var factory = new ApiFactory();

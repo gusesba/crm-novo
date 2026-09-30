@@ -3,7 +3,7 @@ import { Avatar, Empty, ErrorBox, Loading } from "@/components/ui";
 import { useResource } from "@/hooks/use-resource";
 import { api, post } from "@/lib/api";
 import { date, time } from "@/lib/format";
-import type { Chat, Message } from "@/lib/types";
+import type { Chat, Message, SharedContact } from "@/lib/types";
 import { useEffect, useRef, useState } from "react";
 import { MessageComposer } from "./message-composer";
 import { ForwardMessageModal } from "./forward-message-modal";
@@ -15,11 +15,13 @@ export function Conversation({
   userId,
   backup,
   chats,
+  onStartConversation,
 }: {
   chatId: string;
   userId?: string;
   backup: boolean;
   chats: Chat[];
+  onStartConversation: (contact: SharedContact) => void;
 }) {
   const path = `/whatsapp/messages?chatId=${encodeURIComponent(chatId)}${userId ? `&userId=${userId}` : ""}`;
   const result = useResource<Message[]>(path, backup ? undefined : 4000);
@@ -99,7 +101,7 @@ export function Conversation({
           />
         ) : (
           messages.map((m) => (
-            <div className={`message ${m.mine ? "mine" : ""}`} key={m.id}>
+            <div className={`message ${m.mine ? "mine" : ""} ${m.contact ? "contact-message" : ""}`} key={m.id}>
               {!backup && chatId.endsWith("@s.whatsapp.net") && (
                 <MessageActionsMenu
                   message={m}
@@ -116,7 +118,7 @@ export function Conversation({
                   onDelete={() => setDeleting(m)}
                 />
               )}
-              {m.kind !== "text" && (
+              {m.kind !== "text" && !m.contact && (
                 <MessageAttachment
                   message={m}
                   userId={userId}
@@ -125,21 +127,29 @@ export function Conversation({
               )}
               {m.contact && (
                 <div className="message-contact-card">
-                  <Avatar name={m.contact.name} small />
-                  <span>
-                    <strong>{m.contact.name}</strong>
-                    <small>
-                      {m.contact.phone || "Telefone não disponível"}
-                    </small>
-                  </span>
+                  <Avatar
+                    name={m.contact.name}
+                    src={m.contact.phone ? `/api/whatsapp/profile-picture?chatId=${encodeURIComponent(m.contact.phone.replace(/\D/g, "") + "@s.whatsapp.net")}${userId ? `&userId=${encodeURIComponent(userId)}` : ""}` : undefined}
+                  />
+                  <strong>{m.contact.name}</strong>
                 </div>
               )}
               {!!m.text && m.kind !== "sticker" && !m.contact && (
                 <div className="message-text">{m.text}</div>
               )}
               <div className="message-meta">
-                {date(m.timestamp)} · {time(m.timestamp)}
+                {m.contact ? time(m.timestamp) : `${date(m.timestamp)} · ${time(m.timestamp)}`}
               </div>
+              {m.contact && !backup && (
+                <button
+                  type="button"
+                  className="message-contact-action"
+                  disabled={!/^\d{10,15}$/.test(m.contact.phone.replace(/\D/g, ""))}
+                  onClick={() => onStartConversation(m.contact!)}
+                >
+                  Conversar
+                </button>
+              )}
               {!!m.reactions?.length && (
                 <div className="message-reactions">
                   {[
