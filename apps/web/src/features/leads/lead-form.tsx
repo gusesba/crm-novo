@@ -7,6 +7,7 @@ import { CalendarDays, Check, ContactRound, FileText } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { CommercialFields } from "./commercial-fields";
 import { CustomerFields } from "./customer-fields";
+import { LeadConversationButton } from "./lead-conversation-button";
 export function LeadForm({
   lead,
   initial,
@@ -128,6 +129,9 @@ export function LeadForm({
           )}
         </fieldset>
         <div className="modal-footer">
+          {lead && lead.currentSellerId === user.id && lead.status !== "Não Enviar Mais" && !busy && (
+            <LeadConversationButton lead={lead} />
+          )}
           <button type="button" className="button secondary" onClick={onClose}>
             Fechar
           </button>

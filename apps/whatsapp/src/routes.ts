@@ -2,7 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { db } from "./storage/database.js";
 import { listMessages, listRecentStickers } from "./storage/messages.js";
-import { connect, disconnect, sessionStatus } from "./sessions/manager.js";
+import { connect, connectedSocket, disconnect, sessionStatus } from "./sessions/manager.js";
+import { resolvePhone } from "./messaging/resolve-phone.js";
 import {
   campaignSchema,
   deleteSchema,
@@ -44,6 +45,16 @@ export async function registerRoutes(app: FastifyInstance) {
   app.get("/sessions/:user/chats", async (req) =>
     listChats(params.parse(req.params).user),
   );
+  app.post("/sessions/:user/resolve-phone", async (req) => {
+    const { phone } = z.object({ phone: z.string().regex(/^\d{10,15}$/) }).parse(req.body);
+    const user = params.parse(req.params).user;
+    const chatExists = (chatId: string) => Boolean(db.prepare("SELECT 1 FROM chats WHERE user_id=? AND id=?").get(user, chatId));
+    const chatId = phone + "@s.whatsapp.net";
+    if (chatExists(chatId)) return { phone, chatId, requiresConfirmation: false, exists: true };
+    const socket = connectedSocket(user);
+    const result = await resolvePhone(phone, (candidate) => socket.onWhatsApp(candidate));
+    return result ? { ...result, exists: chatExists(result.chatId) } : null;
+  });
   app.get("/sessions/:user/profile-picture", async (req, reply) => {
     const query = z
       .object({

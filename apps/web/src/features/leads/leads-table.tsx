@@ -4,6 +4,7 @@ import { date, money, phone } from "@/lib/format";
 import type { Catalog, Lead, User } from "@/lib/types";
 import { ArrowUpRight } from "lucide-react";
 import Link from "next/link";
+import { LeadConversationButton } from "./lead-conversation-button";
 export function LeadsTable({
   items,
   user,
@@ -108,6 +109,9 @@ export function LeadsTable({
               <td className="muted">{date(l.createdAt)}</td>
               <td>
                 <div className="row-actions">
+                  {l.currentSellerId === user?.id && l.status !== "Não Enviar Mais" && (
+                    <LeadConversationButton lead={l} />
+                  )}
                   <button
                     className="icon-button"
                     onClick={() => setEditing(l)}

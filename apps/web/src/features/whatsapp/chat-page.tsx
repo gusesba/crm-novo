@@ -43,7 +43,7 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
       : undefined;
   useEffect(() => {
     const phone = params.get("phone");
-    if (phone && /^\d{12,15}$/.test(phone))
+    if (phone && /^\d{10,15}$/.test(phone))
       setChat({
         id: phone + "@s.whatsapp.net",
         name: phone,

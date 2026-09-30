@@ -126,8 +126,9 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
     private async Task EnsureCanMessage(string chatId)
     {
         if (!chatId.EndsWith("@s.whatsapp.net")) throw new BusinessException("Selecione uma conversa individual com telefone identificado.");
-        var phone = LeadRules.NormalizePhone(chatId.Split('@')[0]);
-        var leads = await current.Scope(db.Leads).Where(x => x.Phone == phone).ToListAsync();
+        var number = chatId.Split('@')[0];
+        var phone = LeadRules.NormalizePhone(number);
+        var leads = await current.Scope(db.Leads).Where(x => x.Phone == phone || x.Phone == number).ToListAsync();
         if (leads.Any(x => x.Status == LeadStatuses.OptOut)) throw new BusinessException("Este contato está marcado como Não Enviar Mais.", 403);
         if (leads.Count > 0 && !leads.Any(x => x.CurrentSellerId == current.Id)) throw new BusinessException("O contato pertence à carteira de outro vendedor.", 403);
     }
