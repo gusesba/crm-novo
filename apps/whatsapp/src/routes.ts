@@ -49,8 +49,6 @@ export async function registerRoutes(app: FastifyInstance) {
     const { phone } = z.object({ phone: z.string().regex(/^\d{10,15}$/) }).parse(req.body);
     const user = params.parse(req.params).user;
     const chatExists = (chatId: string) => Boolean(db.prepare("SELECT 1 FROM chats WHERE user_id=? AND id=?").get(user, chatId));
-    const chatId = phone + "@s.whatsapp.net";
-    if (chatExists(chatId)) return { phone, chatId, requiresConfirmation: false, exists: true };
     const socket = connectedSocket(user);
     const result = await resolvePhone(phone, (candidate) => socket.onWhatsApp(candidate));
     return result ? { ...result, exists: chatExists(result.chatId) } : null;

@@ -14,6 +14,8 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
     [HttpGet("status")] public Task<JsonElement> Status() => client.Send(current.Id, HttpMethod.Get, "status");
     [HttpPost("connect")] public Task<JsonElement> Connect() => client.Send(current.Id, HttpMethod.Post, "connect");
     [HttpPost("disconnect")] public Task<JsonElement> Disconnect() => client.Send(current.Id, HttpMethod.Post, "disconnect");
+    [HttpPost("resolve-phone")]
+    public Task<JsonElement> ResolvePhone(ResolvePhoneRequest r) => client.Send(current.Id, HttpMethod.Post, "resolve-phone", r);
     [HttpGet("chats")]
     public async Task<object> Chats(int? userId)
     {
@@ -135,6 +137,7 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
 }
 public record AttachmentRequest(string Name, string Mime, string Data, bool VoiceNote = false, bool AsDocument = false);
 public record ContactRequest(string Name, string Phone);
+public record ResolvePhoneRequest([Required, RegularExpression(@"^\d{10,15}$")] string Phone);
 public record SendRequest([Required] string ChatId, [MaxLength(10000)] string? Text, AttachmentRequest? Attachment, ContactRequest? Contact, string? ReplyTo);
 public record EditRequest([Required] string ChatId, [Required, MaxLength(10000)] string Text);
 public record ReactionRequest([Required] string ChatId, [MaxLength(8)] string Emoji);

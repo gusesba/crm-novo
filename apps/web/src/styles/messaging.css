@@ -158,6 +158,22 @@
   padding: 0;
   overflow: hidden;
 }
+.message-phone {
+  padding: 0;
+  color: #008069;
+  font-weight: 600;
+}
+.message-phone:hover {
+  text-decoration: underline;
+}
+.message-menu-popover.message-phone-popover {
+  width: 300px;
+  max-width: calc(100vw - 16px);
+}
+.message-phone-popover > button {
+  font-size: 12px;
+  padding: 10px;
+}
 .message-contact-card {
   display: flex;
   align-items: center;

@@ -1,10 +1,10 @@
 "use client";
 import { useApp } from "@/components/providers";
-import { Avatar, Empty, ErrorBox, Loading, PageHeader } from "@/components/ui";
+import { Avatar, Empty, ErrorBox, Loading, Modal, PageHeader } from "@/components/ui";
 import { LeadForm } from "@/features/leads/lead-form";
 import { useResource } from "@/hooks/use-resource";
 import { post } from "@/lib/api";
-import type { Chat, Lead, PageResult } from "@/lib/types";
+import type { Chat, Lead, PageResult, SharedContact } from "@/lib/types";
 import { Link2, Plus, Search } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -21,6 +21,7 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
   const [create, setCreate] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead>();
   const [error, setError] = useState("");
+  const [phoneVariant, setPhoneVariant] = useState<{ original: string; phone: string; chat: Chat }>();
   const suffix = backup && historyUser ? `?userId=${historyUser}` : "";
   const pictureUrl = (chatId: string) =>
     `/api/whatsapp/profile-picture?chatId=${encodeURIComponent(chatId)}${
@@ -53,6 +54,34 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
         pinnedAt: 0,
       });
   }, [params]);
+  async function startConversation(contact: SharedContact) {
+    setError("");
+    try {
+      const resolved = await post<{ phone: string; chatId: string; requiresConfirmation: boolean } | null>(
+        "/whatsapp/resolve-phone",
+        { phone: contact.phone.replace(/\D/g, "") },
+      );
+      if (!resolved) {
+        setError("Este número e suas variações não foram encontrados no WhatsApp.");
+        return;
+      }
+      const targetChat = chats.data?.find((item) => item.id === resolved.chatId) || {
+        id: resolved.chatId,
+        name: contact.name.replace(/\D/g, "") === contact.phone ? "+" + resolved.phone : contact.name,
+        lastText: "",
+        updatedAt: Date.now(),
+        archived: false,
+        pinnedAt: 0,
+      };
+      if (resolved.requiresConfirmation) {
+        setPhoneVariant({ original: contact.phone, phone: resolved.phone, chat: targetChat });
+        return;
+      }
+      setChat(targetChat);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
   async function link() {
     if (!matchedLead || !chat) return;
     try {
@@ -215,17 +244,7 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
               userId={backup ? historyUser : undefined}
               backup={backup}
               chats={chats.data || []}
-              onStartConversation={(contact) => {
-                const id = contact.phone.replace(/\D/g, "") + "@s.whatsapp.net";
-                setChat(chats.data?.find((item) => item.id === id) || {
-                  id,
-                  name: contact.name,
-                  lastText: "",
-                  updatedAt: Date.now(),
-                  archived: false,
-                  pinnedAt: 0,
-                });
-              }}
+              onStartConversation={(contact) => void startConversation(contact)}
             />
           </div>
         ) : (
@@ -241,6 +260,27 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
           </div>
         )}
       </section>
+      {phoneVariant && (
+        <Modal title="Número alternativo encontrado" onClose={() => setPhoneVariant(undefined)}>
+          <div className="modal-form">
+            <p>
+              O WhatsApp identificou a variação +{phoneVariant.phone} para o número +{phoneVariant.original}.
+              Deseja abrir a conversa com essa variação?
+            </p>
+            <div className="modal-footer">
+              <button type="button" className="button secondary" onClick={() => setPhoneVariant(undefined)}>
+                Cancelar
+              </button>
+              <button type="button" className="button primary" onClick={() => {
+                setChat(phoneVariant.chat);
+                setPhoneVariant(undefined);
+              }}>
+                Abrir conversa
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
       {(create || editingLead) && chat && (
         <LeadForm
           lead={editingLead}

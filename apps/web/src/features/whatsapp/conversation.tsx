@@ -10,6 +10,7 @@ import { ForwardMessageModal } from "./forward-message-modal";
 import { MessageActionsMenu } from "./message-actions-menu";
 import { MessageAttachment } from "./message-attachment";
 import { DeleteMessageModal } from "./delete-message-modal";
+import { MessageText } from "./message-text";
 export function Conversation({
   chatId,
   userId,
@@ -135,7 +136,11 @@ export function Conversation({
                 </div>
               )}
               {!!m.text && m.kind !== "sticker" && !m.contact && (
-                <div className="message-text">{m.text}</div>
+                <MessageText
+                  text={m.text}
+                  onStartConversation={backup ? undefined : onStartConversation}
+                  onError={setError}
+                />
               )}
               <div className="message-meta">
                 {m.contact ? time(m.timestamp) : `${date(m.timestamp)} · ${time(m.timestamp)}`}
