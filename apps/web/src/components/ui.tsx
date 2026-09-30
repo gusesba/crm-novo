@@ -1,6 +1,7 @@
 "use client";
 import { initials, statusClass } from "@/lib/format";
-import { AlertCircle, Inbox, LoaderCircle, X } from "lucide-react";
+import { Inbox, LoaderCircle, X } from "lucide-react";
+import { useApp } from "./providers";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 export function Avatar({
   name,
@@ -52,17 +53,16 @@ export function ErrorBox({
   message: string;
   retry?: () => void;
 }) {
-  return (
-    <div role="alert" className="error-box">
-      <AlertCircle size={18} />
-      <span>{message}</span>
-      {retry && (
-        <button className="text-button" onClick={retry}>
-          Tentar novamente
-        </button>
-      )}
-    </div>
-  );
+  const { notify } = useApp();
+  const lastMessage = useRef("");
+  const retryRef = useRef(retry);
+  retryRef.current = retry;
+  useEffect(() => {
+    if (message && message !== lastMessage.current)
+      notify(message, "error", retryRef.current ? () => retryRef.current?.() : undefined);
+    lastMessage.current = message;
+  }, [message, notify]);
+  return null;
 }
 export function Empty({
   title = "Nenhum registro encontrado",

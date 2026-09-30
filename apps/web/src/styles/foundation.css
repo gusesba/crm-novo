@@ -371,22 +371,104 @@ p {
 .error-box svg {
   flex-shrink: 0;
 }
-.toast {
+.toast-stack {
   position: fixed;
-  bottom: 28px;
-  left: 50%;
-  transform: translateX(-50%);
+  inset: 24px 24px auto auto;
+  width: min(380px, calc(100vw - 32px));
+  margin: 0;
+  padding: 0 0 24px;
+  border: 0;
+  overflow: visible;
+  background: transparent;
+  color: var(--ink);
+  z-index: 1000;
+}
+.toast-stack-count {
+  width: fit-content;
+  margin: 0 0 8px auto;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: 0 2px 12px #19352620;
+  font-size: 11px;
+}
+.toast-stack-cards {
+  position: relative;
+  height: calc(var(--toast-first-height, 60px) + 26px);
+  max-height: calc(100dvh - 110px);
+  overflow: visible;
+  transition: height 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.toast {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  left: 3px;
+  transform: translateY(calc(min(var(--toast-index), 2) * 10px)) scale(calc(1 - min(var(--toast-index), 2) * 0.035));
+  transform-origin: bottom center;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   padding: 15px 19px;
   color: white;
   background: #28533f;
   box-shadow: 0 8px 30px #19352630;
   border-radius: 12px;
-  z-index: 1000;
-  max-width: 90vw;
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease;
+}
+.toast:nth-child(n + 4) {
+  opacity: 0;
+  pointer-events: none;
+}
+.toast-stack:hover .toast-stack-cards,
+.toast-stack:focus-within .toast-stack-cards {
+  height: var(--toast-expanded-height, 60px);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.toast-stack:hover .toast,
+.toast-stack:focus-within .toast {
+  transform: translateY(var(--toast-offset, 0px));
+  opacity: 1;
+  pointer-events: auto;
+}
+.toast > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.toast-content {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.toast-content .text-button {
+  display: block;
+  margin-top: 6px;
+}
+.toast-error {
+  background: #fff0ed;
+  color: #a3574a;
+  border: 1px solid #edc9c1;
 }
 .toast button {
-  color: #d6e9dd;
+  color: inherit;
+}
+.toast-close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+}
+@media (max-width: 600px) {
+  .toast-stack {
+    top: 16px;
+    right: 16px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast,
+  .toast-stack-cards {
+    transition: none;
+  }
 }

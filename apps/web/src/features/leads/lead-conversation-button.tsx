@@ -55,7 +55,7 @@ export function LeadConversationButton({ lead }: { lead: Lead }) {
         >
           {busy ? "Consultando…" : "Conversa"}
         </button>
-        {error && !variant && <small role="alert">{error}</small>}
+        {error && <ErrorBox message={error} />}
       </span>
       {variant &&
         createPortal(
@@ -77,7 +77,6 @@ export function LeadConversationButton({ lead }: { lead: Lead }) {
                   será direcionado para ela.
                 </p>
               )}
-              {error && <ErrorBox message={error} />}
               <div className="modal-footer">
                 <button
                   type="button"

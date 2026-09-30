@@ -1,6 +1,7 @@
 "use client";
 
 import { api } from "@/lib/api";
+import { ErrorBox } from "@/components/ui";
 import type { Attachment } from "@/lib/types";
 import { Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -163,7 +164,7 @@ export function ComposerStickerPicker({
           Suas figurinhas usadas aparecerão aqui. Você também pode criar uma.
         </p>
       )}
-      {error && <p className="composer-sticker-status">{error}</p>}
+      {error && <ErrorBox message={error} />}
       <input
         ref={input}
         type="file"
