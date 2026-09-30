@@ -4,6 +4,20 @@
   justify-content: space-between;
   margin-bottom: 18px;
   gap: 12px;
+  flex-wrap: wrap;
+}
+.dashboard-date-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #6c8275;
+}
+.dashboard-date-filter input {
+  width: auto;
+  min-height: 34px;
+  padding: 7px 11px;
+  font-size: 11px;
 }
 .live-label {
   font-size: 11px;

@@ -116,7 +116,7 @@ export interface SharedContact {
   name: string;
   phone: string;
 }
-export interface ContactGroup {
+export interface LeadGroup {
   id: number;
   name: string;
   count: number;

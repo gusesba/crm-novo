@@ -10,11 +10,22 @@ namespace Crm.Api.Features.Dashboard;
 public class DashboardController(CrmDbContext db, CurrentUser current) : ControllerBase
 {
     [HttpGet]
-    public async Task<object> Get(int? branchId, int days = 30)
+    public async Task<object> Get(int? branchId, int days = 30, DateOnly? startDate = null, DateOnly? endDate = null)
     {
         days = Math.Clamp(days, 7, 365);
         var since = DateTime.UtcNow.Date.AddDays(-days + 1);
-        var leads = await current.Scope(db.Leads).AsNoTracking().Where(x => (!branchId.HasValue || x.BranchId == branchId) && x.CreatedAt >= since).ToListAsync();
+        var until = DateTime.UtcNow.Date.AddDays(1).AddTicks(-1);
+        if (startDate.HasValue || endDate.HasValue)
+        {
+            if (!startDate.HasValue || !endDate.HasValue)
+                throw new BusinessException("Informe a data inicial e a data final.");
+            if (startDate > endDate)
+                throw new BusinessException("A data inicial deve ser anterior ou igual à data final.");
+            since = startDate.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            until = endDate.Value.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+            days = endDate.Value.DayNumber - startDate.Value.DayNumber + 1;
+        }
+        var leads = await current.Scope(db.Leads).AsNoTracking().Where(x => (!branchId.HasValue || x.BranchId == branchId) && x.CreatedAt >= since && x.CreatedAt <= until).ToListAsync();
         var won = leads.Where(x => x.Status == LeadStatuses.Won).ToList();
         var users = await db.Users.Where(x => current.BranchId == null || x.BranchId == current.BranchId).ToDictionaryAsync(x => x.Id, x => x.Name);
         var daily = Enumerable.Range(0, days).Select(i => since.AddDays(i)).Select(day => new

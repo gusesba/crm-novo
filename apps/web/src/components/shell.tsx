@@ -41,7 +41,7 @@ const navigation = [
     section: "RELACIONAMENTO",
   },
   { label: "Disparos", href: "/campaigns", icon: Radio },
-  { label: "Grupos de contatos", href: "/groups", icon: UsersRound },
+  { label: "Grupos de leads", href: "/groups", icon: UsersRound },
   { label: "Histórico e backup", href: "/backup", icon: Vault },
   {
     label: "Configurações",

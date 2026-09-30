@@ -11,7 +11,7 @@ import {
 import { useResource } from "@/hooks/use-resource";
 import { post } from "@/lib/api";
 import { statuses } from "@/lib/format";
-import type { ContactGroup, Lead, PageResult } from "@/lib/types";
+import type { LeadGroup, Lead, PageResult } from "@/lib/types";
 import { Radio, Send } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import {
@@ -22,7 +22,7 @@ import { CampaignTracking } from "./campaign-tracking";
 import { Connection } from "./connection";
 export function CampaignsPage() {
   const { user, catalog, notify } = useApp();
-  const groups = useResource<ContactGroup[]>("/groups");
+  const groups = useResource<LeadGroup[]>("/groups");
   const [messages, setMessages] = useState<CampaignMessageDraft[]>([
     { id: "message-1", text: "" },
   ]);

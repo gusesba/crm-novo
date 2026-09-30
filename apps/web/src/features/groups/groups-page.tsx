@@ -3,17 +3,17 @@ import { useApp } from "@/components/providers";
 import { Empty, ErrorBox, Loading, PageHeader } from "@/components/ui";
 import { useResource } from "@/hooks/use-resource";
 import { api } from "@/lib/api";
-import type { ContactGroup } from "@/lib/types";
+import type { LeadGroup } from "@/lib/types";
 import { ArrowUpRight, Plus, Trash2, UsersRound } from "lucide-react";
 import { useState } from "react";
 import { GroupForm } from "./group-form";
 export function GroupsPage() {
   const { notify } = useApp();
-  const result = useResource<ContactGroup[]>("/groups");
+  const result = useResource<LeadGroup[]>("/groups");
   const [create, setCreate] = useState(false);
-  const [edit, setEdit] = useState<ContactGroup>();
+  const [edit, setEdit] = useState<LeadGroup>();
   const [error, setError] = useState("");
-  async function remove(group: ContactGroup) {
+  async function remove(group: LeadGroup) {
     if (
       !window.confirm(
         `Excluir o grupo ${group.name}? Os leads serão preservados.`,
@@ -33,7 +33,7 @@ export function GroupsPage() {
       <PageHeader
         eyebrow="CONVERSAS COM ALGO EM COMUM"
         title="Públicos certos. Mais proximidade."
-        description="Organize contatos da sua carteira em grupos internos para facilitar os disparos."
+        description="Organize leads da sua carteira em grupos internos para facilitar os disparos."
         actions={
           <button className="button primary" onClick={() => setCreate(true)}>
             <Plus size={17} />
@@ -50,7 +50,7 @@ export function GroupsPage() {
         <section className="panel">
           <Empty
             title="Seu primeiro público começa aqui"
-            description="Crie grupos por serviço, status ou selecionando os contatos da sua carteira."
+            description="Filtre por serviço, status e data de cadastro e selecione os leads do grupo."
             action={
               <button
                 className="button secondary"
@@ -78,7 +78,7 @@ export function GroupsPage() {
                 </button>
               </div>
               <h3>{g.name}</h3>
-              <p>{g.count} contatos na sua carteira</p>
+              <p>{g.count} leads no grupo</p>
               <div className="group-card-footer">
                 <span className="pill">Grupo interno</span>
                 <button className="text-button" onClick={() => setEdit(g)}>
