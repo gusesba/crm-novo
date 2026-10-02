@@ -12,6 +12,8 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<ContactGroup> Groups => Set<ContactGroup>();
     public DbSet<GroupMember> GroupMembers => Set<GroupMember>();
+    public DbSet<LeadClassification> Classifications => Set<LeadClassification>();
+    public DbSet<LeadClassificationMember> LeadClassifications => Set<LeadClassificationMember>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -30,5 +32,11 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
         b.Entity<ContactGroup>().HasMany(x => x.Members).WithOne().HasForeignKey(x => x.GroupId);
         b.Entity<GroupMember>().HasKey(x => new { x.GroupId, x.LeadId });
         b.Entity<GroupMember>().HasOne<Lead>().WithMany().HasForeignKey(x => x.LeadId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<LeadClassification>().Property(x => x.Name).HasMaxLength(80);
+        b.Entity<LeadClassification>().Property(x => x.Color).HasMaxLength(7);
+        b.Entity<LeadClassification>().HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+        b.Entity<LeadClassificationMember>().HasKey(x => new { x.ClassificationId, x.LeadId });
+        b.Entity<LeadClassificationMember>().HasOne<LeadClassification>().WithMany().HasForeignKey(x => x.ClassificationId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<LeadClassificationMember>().HasOne<Lead>().WithMany().HasForeignKey(x => x.LeadId).OnDelete(DeleteBehavior.Cascade);
     }
 }

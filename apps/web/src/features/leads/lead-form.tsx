@@ -8,6 +8,7 @@ import { useState, type FormEvent } from "react";
 import { CommercialFields } from "./commercial-fields";
 import { CustomerFields } from "./customer-fields";
 import { LeadConversationButton } from "./lead-conversation-button";
+import { Classifications } from "./classifications";
 export function LeadForm({
   lead,
   initial,
@@ -98,6 +99,7 @@ export function LeadForm({
       }
       onClose={onClose}
     >
+      {lead && <div className="lead-classifications"><Classifications leadId={lead.id} /></div>}
       <form onSubmit={submit} className="modal-form">
         {error && <ErrorBox message={error} />}
         <fieldset disabled={!canEdit || busy}>

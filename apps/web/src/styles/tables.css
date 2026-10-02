@@ -144,6 +144,23 @@ tbody tr:hover {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+.lead-classification-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 120px;
+  max-width: 240px;
+}
+.lead-classification-badge {
+  border: 1px solid;
+  color: #40564b;
+  max-width: 240px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.lead-classification-badge i {
+  flex-shrink: 0;
+}
 .row-actions {
   display: flex;
   align-items: center;

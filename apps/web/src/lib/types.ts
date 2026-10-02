@@ -43,6 +43,7 @@ export interface Lead {
   revision: number;
   createdAt: string;
   updatedAt: string;
+  classifications?: LeadClassification[];
 }
 export interface PageResult<T> {
   items: T[];
@@ -79,6 +80,11 @@ export interface DashboardData {
   }[];
   recent: Lead[];
 }
+export interface LeadClassification {
+  id: number;
+  name: string;
+  color: string;
+}
 export interface Chat {
   id: string;
   name: string;
@@ -86,6 +92,8 @@ export interface Chat {
   updatedAt: number;
   archived: boolean;
   pinnedAt: number;
+  leadId?: number | null;
+  classifications?: LeadClassification[];
 }
 export interface Message {
   id: string;

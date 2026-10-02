@@ -21,23 +21,34 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
     {
         var historyUser = await HistoryUser(userId);
         var chats = await client.Send(historyUser, HttpMethod.Get, "chats");
-        var leadNames = await current.Scope(db.Leads.AsNoTracking())
+        var linkedLeads = await current.Scope(db.Leads.AsNoTracking())
             .Where(x => x.ChatUserId == historyUser && x.ChatId != null)
-            .ToDictionaryAsync(x => x.ChatId!, x => x.Name);
+            .Select(x => new { x.Id, x.Name, x.ChatId }).ToListAsync();
+        var leadsByChat = linkedLeads.ToDictionary(x => x.ChatId!);
+        var leadIds = linkedLeads.Select(x => x.Id).ToArray();
+        var classifications = await (from m in db.LeadClassifications.AsNoTracking()
+            join c in db.Classifications.AsNoTracking() on m.ClassificationId equals c.Id
+            where leadIds.Contains(m.LeadId) && c.UserId == current.Id
+            orderby c.Name, c.Id
+            select new { m.LeadId, c.Id, c.Name, c.Color }).ToListAsync();
+        var classificationsByLead = classifications.ToLookup(x => x.LeadId);
         return chats.EnumerateArray().Select(chat =>
         {
             var id = chat.GetProperty("id").GetString()!;
             var whatsappName = chat.GetProperty("name").GetString();
             var number = id.Split('@')[0];
+            var lead = leadsByChat.GetValueOrDefault(id);
             return new
             {
                 id,
-                name = leadNames.GetValueOrDefault(id) ??
+                name = lead?.Name ??
                     (!string.IsNullOrWhiteSpace(whatsappName) && !whatsappName.Contains('@') ? whatsappName : number),
                 lastText = chat.GetProperty("lastText").GetString(),
                 updatedAt = chat.GetProperty("updatedAt").GetInt64(),
                 archived = chat.GetProperty("archived").GetInt32() != 0,
-                pinnedAt = chat.GetProperty("pinnedAt").GetInt64()
+                pinnedAt = chat.GetProperty("pinnedAt").GetInt64(),
+                leadId = lead?.Id,
+                classifications = classificationsByLead[lead?.Id ?? 0].Select(x => new { x.Id, x.Name, x.Color })
             };
         });
     }

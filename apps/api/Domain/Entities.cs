@@ -79,3 +79,17 @@ public class GroupMember
     public int GroupId { get; set; }
     public int LeadId { get; set; }
 }
+
+public class LeadClassification
+{
+    public int Id { get; set; }
+    public int UserId { get; set; }
+    public string Name { get; set; } = "";
+    public string Color { get; set; } = "";
+}
+
+public class LeadClassificationMember
+{
+    public int ClassificationId { get; set; }
+    public int LeadId { get; set; }
+}

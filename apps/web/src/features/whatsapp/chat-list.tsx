@@ -3,6 +3,7 @@ import { date } from "@/lib/format";
 import type { Chat } from "@/lib/types";
 import { Archive, Pin } from "lucide-react";
 import { useEffect, useState } from "react";
+import { ClassificationDots } from "@/features/leads/classifications";
 
 type Props = {
   chats: Chat[];
@@ -35,7 +36,7 @@ function ChatItem({ chat, selected, pictureUrl, onSelect, onOpenPhoto }: ItemPro
         onClick={() => onSelect(chat)}
       >
         <div>
-          <strong>{name}</strong>
+          <div className="chat-name"><strong>{name}</strong><ClassificationDots items={chat.classifications} /></div>
           <p>{chat.lastText}</p>
         </div>
         <span className="chat-item-meta">

@@ -11,7 +11,7 @@ namespace Crm.Api.Features.Leads;
 public class LeadsController(CrmDbContext db, CurrentUser current, LeadService service, WhatsAppClient whatsapp) : ControllerBase
 {
     [HttpGet]
-    public async Task<object> List(string? search, string? status, int? serviceId, int? sellerId, int? branchId, bool mine = false, bool sales = false, int page = 1, int pageSize = 20)
+    public async Task<object> List(string? search, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId, bool mine = false, bool sales = false, int page = 1, int pageSize = 20)
     {
         var query = current.Scope(db.Leads.AsNoTracking());
         if (!string.IsNullOrWhiteSpace(search))
@@ -25,8 +25,25 @@ public class LeadsController(CrmDbContext db, CurrentUser current, LeadService s
         if (serviceId.HasValue) query = query.Where(x => x.ServiceId == serviceId);
         if (sellerId.HasValue) query = query.Where(x => x.CurrentSellerId == sellerId);
         if (branchId.HasValue) query = query.Where(x => x.BranchId == branchId);
+        var personalClassifications = from member in db.LeadClassifications.AsNoTracking()
+                                      join classification in db.Classifications.AsNoTracking() on member.ClassificationId equals classification.Id
+                                      where classification.UserId == current.Id
+                                      select new { member.LeadId, classification.Id, classification.Name, classification.Color };
+        if (classificationId.HasValue)
+            query = query.Where(x => personalClassifications.Any(c => c.LeadId == x.Id && c.Id == classificationId));
         pageSize = Math.Clamp(pageSize, 1, 100); page = Math.Max(page, 1);
-        return new { items = await query.OrderByDescending(x => x.CreatedAt).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(), total = await query.CountAsync(), page, pageSize };
+        var items = await query.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(lead => new
+            {
+                lead.Id, lead.BranchId, lead.SellerId, lead.CurrentSellerId, lead.Name, lead.Phone,
+                lead.AdditionalPhone, lead.Email, lead.Gender, lead.BirthDate, lead.Origin, lead.Referral,
+                lead.Discovery, lead.ChoiceReason, lead.ServiceId, lead.ConditionId, lead.Status, lead.Value,
+                lead.Notes, lead.Contract, lead.ChatId, lead.ChatUserId, lead.Revision, lead.CreatedAt, lead.UpdatedAt,
+                classifications = personalClassifications.Where(c => c.LeadId == lead.Id).OrderBy(c => c.Name).ThenBy(c => c.Id)
+                    .Select(c => new { c.Id, c.Name, c.Color }).ToArray()
+            }).ToListAsync();
+        return new { items, total = await query.CountAsync(), page, pageSize };
     }
     [HttpGet("{id:int}")] public Task<Lead> Get(int id) => service.Find(id);
     [HttpPost] public Task<Lead> Create(LeadRequest r) => service.Save(null, r);

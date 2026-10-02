@@ -1,6 +1,6 @@
 # Documentação técnica dos fluxos do Via CRM
 
-Levantamento do código em **30/09/2026**. Este documento descreve a implementação encontrada no frontend Next.js, na API .NET e no serviço WhatsApp Node/Fastify/Baileys. O inventário foi construído a partir das rotas, componentes, handlers, serviços, persistência e testes; `FUNCIONALIDADES.md` não foi usado como fonte do inventário.
+Levantamento do código em **02/10/2026**. Este documento descreve a implementação encontrada no frontend Next.js, na API .NET e no serviço WhatsApp Node/Fastify/Baileys. O inventário foi construído a partir das rotas, componentes, handlers, serviços, persistência e testes; `FUNCIONALIDADES.md` não foi usado como fonte do inventário.
 
 “Todos os fluxos” significa os caminhos de negócio e as ramificações explícitas implementadas, incluindo sucesso, validação, autorização, cancelamento, falha parcial e processamento automático. Falhas genéricas compartilhadas estão na seção 3 e se aplicam às operações posteriores. Não é uma homologação de uma conta real do WhatsApp nem uma promessa de compatibilidade do protocolo externo.
 
@@ -14,13 +14,13 @@ Os exemplos usam JSON com propriedades camelCase, como recebido/enviado pelo nav
 | Infraestrutura compartilhada | Proxy HTTP, cookie, CSRF, autorização por sede, erros, carregamento, atualização e notificações | 3 |
 | `/login`, `/` e navegação | Entrar, recuperar sessão, redirecionar por perfil, sair, menu móvel e ajuda | 4 |
 | `/dashboard` | Indicadores, evolução diária, distribuição de status, ranking, filtros de período/sede, próximos retornos e novo lead | 5 |
-| `/leads`, `/my-leads`, `/sales` | Consulta geral/pessoal/vendas, busca, filtros, paginação, detalhe, criação, edição comercial/de contato, mudança de status, exclusão e transferências | 6 |
+| `/leads`, `/my-leads`, `/sales` | Consulta geral/pessoal/vendas, busca, filtros (incluindo classificação pessoal), paginação, etiquetas coloridas na tabela, detalhe, criação, edição comercial/de contato, mudança de status, exclusão e transferências | 6 |
 | Leads ↔ conversas | Resolver telefone/variantes, confirmar troca de telefone, abrir conversa, vincular explicitamente e criar/editar lead a partir do chat | 7 |
 | `/appointments` | Agenda geral/pessoal/por lead, concluídos, paginação, criação, edição, conclusão, reabertura e exclusão | 8 |
 | `/groups` | Listar grupos internos, filtrar candidatos, seleção em várias páginas, criar, renomear, substituir participantes e excluir | 9 |
 | `/settings` | Equipe, senha/perfil/sede, ativação e inativação de usuários, sedes, serviços e condições de venda | 10 |
 | `/whatsapp`, `/campaigns` | Sessão pessoal, QR Code, status, desconexão, reconexão e restauração | 11 |
-| `/whatsapp` | Lista/busca de conversas, arquivadas/fixadas, fotos, histórico, mensagens anteriores e nova conversa | 12 |
+| `/whatsapp` | Lista/busca de conversas, arquivadas/fixadas, fotos, histórico, mensagens anteriores, nova conversa e bolinhas/seleção múltipla de classificações do lead vinculado | 12 |
 | Compositor e mensagens | Texto, emoji, resposta, edição, reação/remoção de reação, encaminhamento, exclusão local/para todos | 13 |
 | Anexos e contatos | Fotos, vídeos, documentos, áudio, gravação de voz, figurinhas recentes/criadas, vCard, telefone detectado no texto, copiar número, prévia/download de mídia | 14 |
 | Serviço WhatsApp | Receber/sincronizar mensagens, contatos e estados de chats; persistir edição, reação e revogação | 15 |
@@ -173,16 +173,17 @@ Fontes: [overview.tsx](../apps/web/src/features/dashboard/overview.tsx), [Dashbo
 
 ## 6. Leads, carteira e vendas
 
-Fontes: [leads-page.tsx](../apps/web/src/features/leads/leads-page.tsx), [lead-form.tsx](../apps/web/src/features/leads/lead-form.tsx), [customer-fields.tsx](../apps/web/src/features/leads/customer-fields.tsx), [commercial-fields.tsx](../apps/web/src/features/leads/commercial-fields.tsx), [LeadsController.cs](../apps/api/Features/Leads/LeadsController.cs), [LeadRequest.cs](../apps/api/Features/Leads/LeadRequest.cs), [LeadService.cs](../apps/api/Features/Leads/LeadService.cs), [LeadRules.cs](../apps/api/Domain/LeadRules.cs).
+Fontes: [leads-page.tsx](../apps/web/src/features/leads/leads-page.tsx), [leads-table.tsx](../apps/web/src/features/leads/leads-table.tsx), [lead-form.tsx](../apps/web/src/features/leads/lead-form.tsx), [customer-fields.tsx](../apps/web/src/features/leads/customer-fields.tsx), [commercial-fields.tsx](../apps/web/src/features/leads/commercial-fields.tsx), [LeadsController.cs](../apps/api/Features/Leads/LeadsController.cs), [LeadRequest.cs](../apps/api/Features/Leads/LeadRequest.cs), [LeadService.cs](../apps/api/Features/Leads/LeadService.cs), [LeadRules.cs](../apps/api/Domain/LeadRules.cs).
 
 ### 6.1 Listar, buscar e filtrar
 
 1. `/leads`, `/my-leads` e `/sales` usam o mesmo componente com modos all/mine/sales.
-2. Entrada/filtros/página → `GET /api/leads?search=&page=1&pageSize=10&mine=false&sales=false`, acrescido de `status`, `serviceId`, `sellerId`, `branchId` quando preenchidos.
+2. Entrada/filtros/página → `GET /api/leads?search=&page=1&pageSize=10&mine=false&sales=false`, acrescido de `status`, `serviceId`, `sellerId`, `branchId`, `classificationId` quando preenchidos. O filtro de classificação carrega `GET /api/classifications`, só com opções pessoais; “Todas as classificações” remove esse filtro. Durante carregamento/falha do catálogo, desabilita apenas esse filtro; falha mostra ErrorBox com retry e não impede consultar a tabela pelos demais critérios.
 3. Meus leads envia `mine=true`; Vendas envia `sales=true`. API aplica CurrentSellerId para mine e status Venda Efetivada para sales.
 4. Busca por nome/telefone tem debounce de 250 ms. Nome usa lower; telefone usa substring da string armazenada (o termo da busca não é normalizado como telefone).
-5. API aplica escopo de sede, filtros combinados, ordena CreatedAt descendente, pagina e retorna `{items:[Lead],total,page,pageSize}`. Limita pageSize a 1–100 e page ao mínimo 1.
+5. API aplica escopo de sede e filtros combinados antes de contar/paginar, ordena CreatedAt e ID descendentes, pagina e retorna `{items:[Lead com classifications:[{id,name,color}]],total,page,pageSize}`. As classificações vêm ordenadas por nome/ID e pertencem somente ao usuário autenticado, inclusive para admins; ausência retorna `[]`. `classificationId` filtra vínculos pessoais sem ampliar o escopo: ID inexistente ou de outro usuário retorna lista vazia/total zero, sem revelar seu dono. Formato não numérico → `400`. Não há consulta HTTP por linha. Limita pageSize a 1–100 e page ao mínimo 1.
 6. Alterar filtro/busca redefine página; mudança de filtros/página limpa seleção de transferência. Filtro vendedor não aparece em Meus leads; status não aparece em Vendas. Retorno vazio → Empty; falha → ErrorBox/retry.
+7. A coluna “Classificações” mostra todas as marcações pessoais como etiquetas com nome, bolinha, borda e fundo derivados da cor cadastrada; sem classificação mostra traço. Ao fechar o detalhe (inclusive Cancelar/Escape), recarrega tabela e catálogo do filtro, pois classificações criadas/marcadas no seletor já foram salvas automaticamente mesmo sem salvar o formulário principal. Salvar o lead também recarrega ambos; não há polling nessa tela.
 
 ### 6.2 Abrir detalhe e consultar
 
@@ -252,7 +253,7 @@ Todos os status podem ser escolhidos diretamente no formulário: Agendar Contato
 
 ### 6.6 Excluir lead
 
-Admin → botão Excluir → confirmação do navegador. Cancelar → nenhuma chamada. Confirmar → `DELETE /api/leads/{id}` → perfil admin + busca no escopo → remove lead → EF exclui agendamentos e GroupMembers em cascata → `204` → toast/fecha modal/limpa seleção/recarrega lista.
+Admin → botão Excluir → confirmação do navegador. Cancelar → nenhuma chamada. Confirmar → `DELETE /api/leads/{id}` → perfil admin + busca no escopo → remove lead → EF exclui agendamentos, GroupMembers e vínculos LeadClassifications em cascata (preserva o catálogo pessoal de classificações) → `204` → toast/fecha modal/limpa seleção/recarrega lista.
 
 Lead ausente/fora do escopo → `404`; vendedor → `403`. Conversas/mensagens no outro banco e snapshots de campanha permanecem. Exclusão na tela de chat usa onClose quando não há onDeleted; não há callback específico de reload do leadMatch nesse caminho.
 
@@ -270,6 +271,19 @@ Lead ausente/fora do escopo → `404`; vendedor → `403`. Conversas/mensagens n
 5. Temporária → muda CurrentSellerId e preserva SellerId. Permanente → muda ambos. Ambas limpam vínculo do chat, atualizam UpdatedAt e incrementam Revision.
 6. `204` → toast, fecha modal, limpa seleção e recarrega lista. Histórico fica na sessão de origem; agenda acompanha o vendedor atual por join, sem mudar LeadId.
 7. Não há prazo de expiração/retorno automático para transferência temporária: outra transferência é necessária para devolver o atendimento.
+
+### 6.8 Classificações pessoais de leads
+
+Fontes: [classifications.tsx](../apps/web/src/features/leads/classifications.tsx), [ClassificationsController.cs](../apps/api/Features/Leads/ClassificationsController.cs), [Entities.cs](../apps/api/Domain/Entities.cs), [CrmDbContext.cs](../apps/api/Infrastructure/CrmDbContext.cs).
+
+1. Qualquer usuário autenticado pode abrir “Classificações” no detalhe de um lead já salvo ou no cabeçalho de uma conversa vinculada, ao lado de “Abrir lead”. Não há botão de classificações na barra lateral do WhatsApp. Lead novo precisa ser cadastrado antes de receber classificações. O seletor é uma lista compacta junto ao botão, com bolinha colorida e nome por item, bordas arredondadas e sombra; não escurece a página.
+2. `GET /api/classifications` retorna somente as classificações do usuário autenticado, ordenadas por nome/ID. Mesmo administradores não recebem as classificações de outros usuários. Não há parâmetro para selecionar outro dono.
+3. Criar exige nome não vazio, até 80 caracteres, e cor hexadecimal `#RRGGBB`: `POST /api/classifications` com `{ "name": "Em negociação", "color": "#ffcc00" }`. API define UserId a partir da sessão, remove espaços das extremidades do nome e normaliza cor para minúsculas; retorna `200 {id,userId,name,color}`. Nome/cor inválidos → `400`, sem persistência. Nomes iguais são permitidos.
+4. Abrir seleção consulta `GET /api/leads/{id}/classifications`: exige lead no escopo de leitura da sede e retorna somente classificações pessoais aplicadas ao lead. Ausente/fora do escopo → `404`. Como a marcação é pessoal, pode classificar um lead da sede atendido por outro vendedor; não altera dados comerciais, Revision ou UpdatedAt do lead.
+5. Cada item é um botão de seleção múltipla: clicar alterna sua marcação, escurece o fundo dos selecionados e salva imediatamente via `PUT /api/leads/{id}/classifications` com `{ "classificationIds": [1, 2] }`, substituindo apenas os vínculos desse usuário. Não há checkbox, select ou botão Salvar. Array obrigatório, até 100 entradas; IDs repetidos são deduplicados. Desmarcar o último item envia `[]` e remove todas as marcações pessoais. IDs inexistentes/de outro usuário → `404` antes de alterar qualquer vínculo; erro de validação → `400`. `SaveChanges` grava adições/remoções em uma transação; erro de gravação não salva um subconjunto. Vínculos dos demais usuários são preservados.
+6. A marcação visual muda ao clicar. Sucesso → `204`, mantém a lista aberta, recarrega classificações do botão e lista de chats quando aberta pelo cabeçalho do WhatsApp. Falha desfaz a marcação otimista, preserva a seleção anterior e mostra mensagem na lista; o item pode ser clicado novamente para tentar salvar. Falha de carregamento oferece retry e bloqueia seleção. Durante gravação, anuncia “Salvando…” para leitores de tela sem inserir uma linha visível ou alterar tamanho/posição da lista. Itens mantêm foco e aparência, com aria-disabled e bloqueio de cliques pelo estado da gravação; criação e fechamento por clique externo/Escape também ficam bloqueados para evitar operações sobrepostas. O seletor permanece montado até ser fechado ou mudar o lead.
+7. Clique fora da lista ou Escape fecha o seletor após concluir gravações; não desfaz alterações já salvas. Escape interrompe a propagação do cancelamento para manter o detalhe do lead aberto quando o seletor está dentro dele. “Nova classificação” expande campos de nome/cor no próprio seletor; Criar persiste o catálogo, recolhe os campos e atualiza a lista sem marcar automaticamente o lead. Cancelar essa criação descarta apenas os campos não enviados. Fechar o formulário do lead também não desfaz classificações salvas automaticamente.
+8. Persistência: Classifications guarda ID/dono/nome/cor; LeadClassifications guarda o par ClassificationId+LeadId único, com cascata na exclusão do lead/classificação. Transferências preservam marcações pessoais do lead, mas removem o vínculo da conversa; as bolinhas só reaparecem quando há novo vínculo explícito. A tabela de leads mostra etiquetas pessoais e permite filtrar por uma classificação junto aos demais critérios (6.1). Não existem edição/exclusão de classificações.
 
 ## 7. Abrir/vincular conversa e cadastrar pelo chat
 
@@ -469,10 +483,12 @@ Fontes: [chat-page.tsx](../apps/web/src/features/whatsapp/chat-page.tsx), [chat-
 
 1. ChatPage → `GET /api/whatsapp/chats` a cada cinco segundos → serviço consulta SQLite por user.
 2. Normaliza chat states @lid para telefone quando há mapeamento nas chaves. Lista até quinhentas conversas não arquivadas e todas as arquivadas; prioriza fixadas/data. Chats só com estado, sem registro em chats, não são produzidos por essa consulta.
-3. API aplica nome de lead vinculado no escopo/sessão sobre o nome recebido; fallback é nome válido do WhatsApp ou número. Retorna `[{id,name,lastText,updatedAt,archived,pinnedAt}]`.
+3. API aplica nome de lead vinculado no escopo/sessão sobre o nome recebido; fallback é nome válido do WhatsApp ou número. Retorna `[{id,name,lastText,updatedAt,archived,pinnedAt,leadId,classifications:[{id,name,color}]}]`. Sem vínculo explícito: leadId=null/classifications=[], mesmo que o telefone coincida com um lead. Consulta os vínculos/classificações em lote, somente do usuário autenticado.
 4. Busca por nome/ID acontece localmente, sem parâmetro para API. Busca abre seção de arquivadas. Front separa fixadas, normais e arquivadas; botão Arquivadas apenas expande/recolhe.
 5. Estados são recebidos do WhatsApp; não há ações para arquivar/desarquivar/fixar/desafixar pelo CRM.
 6. Lista vazia → Empty. Selecionar chat define estado local, não envia mensagem nem marca leitura remotamente.
+7. Cada classificação pessoal do lead vinculado aparece como uma bolinha ao lado do nome, com nome acessível e tooltip. No cabeçalho de uma conversa vinculada, somente o botão ao lado de “Abrir lead” abre a lista compacta para criar, selecionar e remover várias marcações com salvamento automático ao clicar nos itens (6.8); não há botão acima de Arquivadas. Conversas sem lead vinculado não exibem esse seletor. Lista atualiza no polling de cinco segundos ou após cada marcação/desmarcação/vinculação/criação de lead pelo chat; seletor consulta classificações ao abrir, sem polling próprio.
+8. Backup também pode mostrar as bolinhas, sempre das classificações de quem está consultando, inclusive ao consultar sessão de outro usuário. Não expõe o catálogo/marcações do dono da sessão e não exibe controles de criação/atribuição.
 
 ### 12.2 Foto e ampliação de perfil
 
@@ -772,7 +788,7 @@ Fontes: [backup/page.tsx](../apps/web/src/app/%28workspace%29/backup/page.tsx), 
 
 Fontes: [CrmDbContext.cs](../apps/api/Infrastructure/CrmDbContext.cs), [Entities.cs](../apps/api/Domain/Entities.cs), [database.ts](../apps/whatsapp/src/storage/database.ts), [server.ts](../apps/whatsapp/src/server.ts), [compose.yaml](../compose.yaml).
 
-- CRM: Branches, Users, Catalog, Leads, Appointments, Groups e GroupMembers via EF/SQLite. Índices únicos Username, BranchId+Phone e ChatUserId+ChatId. Revision é concurrency token só no lead.
+- CRM: Branches, Users, Catalog, Leads, Appointments, Groups, GroupMembers, Classifications e LeadClassifications via EF/SQLite. Índices únicos Username, BranchId+Phone e ChatUserId+ChatId; chave composta ClassificationId+LeadId nos vínculos pessoais. A migração LeadClassifications cria as novas tabelas no início da API, preservando os registros existentes. Revision é concurrency token só no lead.
 - Relações para sede/usuários/catálogo são restritas na exclusão. Excluir lead elimina retornos e memberships; excluir grupo elimina memberships. Não há histórico de transferências/edições por entidade.
 - WhatsApp: auth, contacts, service_state, chats, chat_states, messages, reactions, profile_pictures, campaigns, deliveries no banco separado. Chats/mensagens/auth usam isolamento por user_id; campanha usa UUID + dono.
 - CRM e serviço têm `GET /health` → `{status:'ok'}`, sem login/chave. São checks de processo; não atestam WhatsApp conectado nem fazem validação aprofundada de dependências.
@@ -804,13 +820,14 @@ Estes pontos são parte do fluxo implementado e devem ser considerados ao valida
 
 O levantamento percorreu todas as páginas de `apps/web/src/app`, componentes funcionais em `features`, Provider/cliente HTTP/hook de recursos, todos os controllers de `apps/api/Features`, regras/entidades/índices do CRM e rotas/sessões/messaging/campaigns/storage do serviço WhatsApp. CSS e screenshots não foram usados para inferir comportamento de back.
 
-Foram conferidos os cenários declarados na suíte existente, sem executar envios reais ou afirmar nova execução de testes nesta alteração documental:
+Foram conferidos os cenários declarados na suíte existente, sem executar envios reais. Na entrega de classificações pessoais e seu filtro na tabela de 02/10/2026, os 58 testes da API passaram (incluindo ClassificationTests), assim como a checagem de tipos e o build de produção do frontend. A interface foi conferida com banco e serviço WhatsApp simulados, incluindo criação no menu compacto, seleção múltipla por item com salvamento automático, bolinhas, persistência ao reabrir e falha de gravação com retorno à seleção anterior. A correção da piscada foi verificada ao marcar/desmarcar com resposta de gravação atrasada em dois segundos: a lista manteve tamanho, posição, foco e opacidade durante e após a requisição. Na tabela foram conferidas etiquetas coloridas, filtro pessoal com retorno à primeira página, atualização após fechar o detalhe sem salvar o formulário e Escape fechando apenas o seletor aninhado:
 
 | Evidência no repositório | Regras/caminhos corroborados |
 | --- | --- |
 | [BusinessFlowTests.cs](../tests/Crm.Api.Tests/BusinessFlowTests.cs) | CSRF, escopo, telefone único, transferências, OptOut, retornos, grupos e elegibilidade |
 | [LeadScopeTests.cs](../tests/Crm.Api.Tests/LeadScopeTests.cs), [LeadEditingTests.cs](../tests/Crm.Api.Tests/LeadEditingTests.cs) | Leitura/edição por sede/carteira, proteção de contato, exclusão |
 | [LeadConversationTests.cs](../tests/Crm.Api.Tests/LeadConversationTests.cs) | Variantes, confirmação, duplicidade, conversa existente e número ausente |
+| [ClassificationTests.cs](../tests/Crm.Api.Tests/ClassificationTests.cs) | Isolamento pessoal inclusive para admin, cores/nomes/payloads inválidos, escopo de leads, seleção múltipla/remoção/cascata, rejeição atômica de IDs alheios, bolinhas com vínculo explícito/backup e etiquetas/filtro pessoal na listagem antes da paginação, combinado com carteira/vendas/serviço/sede/vendedor e preservando o escopo de sede |
 | [GroupLeadTests.cs](../tests/Crm.Api.Tests/GroupLeadTests.cs) | Seleção sem vínculo, filtros combinados, escopo e seleção além de cem |
 | [CampaignAudienceTests.cs](../tests/Crm.Api.Tests/CampaignAudienceTests.cs) | Público de outros vendedores, filtros, exclusões, confirmação e elegibilidade |
 | [DashboardScopeTests.cs](../tests/Crm.Api.Tests/DashboardScopeTests.cs), [DashboardPeriodTests.cs](../tests/Crm.Api.Tests/DashboardPeriodTests.cs) | Período inclusivo, indicadores e agenda por sede |

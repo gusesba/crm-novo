@@ -4,7 +4,7 @@ import { Empty, ErrorBox, Loading, PageHeader } from "@/components/ui";
 import { useResource } from "@/hooks/use-resource";
 import { api } from "@/lib/api";
 import { statuses } from "@/lib/format";
-import type { Lead, PageResult } from "@/lib/types";
+import type { Lead, LeadClassification, PageResult } from "@/lib/types";
 import {
   ArrowLeftRight,
   ChevronLeft,
@@ -32,6 +32,8 @@ export function LeadsPage({
   const [service, setService] = useState("");
   const [seller, setSeller] = useState("");
   const [branch, setBranch] = useState("");
+  const [classification, setClassification] = useState("");
+  const classifications = useResource<LeadClassification[]>("/classifications");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<number[]>([]);
   const [editing, setEditing] = useState<Lead>();
@@ -56,10 +58,11 @@ export function LeadsPage({
   if (service) query.set("serviceId", service);
   if (seller) query.set("sellerId", seller);
   if (branch) query.set("branchId", branch);
+  if (classification) query.set("classificationId", classification);
   const result = useResource<PageResult<Lead>>(`/leads?${query}`);
   useEffect(() => {
     setSelected([]);
-  }, [page, debounced, status, service, seller, branch]);
+  }, [page, debounced, status, service, seller, branch, classification]);
   const deepLink = searchParams.get("lead");
   useEffect(() => {
     if (deepLink)
@@ -127,6 +130,22 @@ export function LeadsPage({
           </div>
           <div className="filter-row">
             <Filter size={16} />
+            <select
+              aria-label="Filtrar classificação"
+              value={classification}
+              disabled={classifications.loading || !!classifications.error}
+              onChange={(e) => {
+                setClassification(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">
+                {classifications.loading ? "Carregando classificações…" : "Todas as classificações"}
+              </option>
+              {classifications.data?.map((item) => (
+                <option key={item.id} value={item.id}>{item.name}</option>
+              ))}
+            </select>
             {mode !== "sales" && (
               <select
                 aria-label="Filtrar status"
@@ -193,6 +212,9 @@ export function LeadsPage({
             )}
           </div>
         </div>
+        {classifications.error && (
+          <ErrorBox message={classifications.error} retry={classifications.reload} />
+        )}
         {(error || result.error) && (
           <ErrorBox message={error || result.error} retry={result.reload} />
         )}
@@ -248,11 +270,14 @@ export function LeadsPage({
           onClose={() => {
             setCreate(false);
             setEditing(undefined);
+            result.reload();
+            classifications.reload();
           }}
           onSaved={() => {
             setCreate(false);
             setEditing(undefined);
             result.reload();
+            classifications.reload();
           }}
         />
       )}{" "}

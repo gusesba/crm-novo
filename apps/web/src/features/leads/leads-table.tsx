@@ -40,6 +40,7 @@ export function LeadsTable({
             <th>CLIENTE</th>
             <th>SERVIÇO / ORIGEM</th>
             <th>STATUS</th>
+            <th>CLASSIFICAÇÕES</th>
             <th>VENDEDOR ATUAL</th>
             <th>VALOR</th>
             <th>ENTRADA</th>
@@ -88,6 +89,22 @@ export function LeadsTable({
               </td>
               <td>
                 <Badge status={l.status} />
+              </td>
+              <td>
+                {l.classifications?.length ? (
+                  <div className="lead-classification-list">
+                    {l.classifications.map((item) => (
+                      <span
+                        key={item.id}
+                        className="badge lead-classification-badge"
+                        style={{ backgroundColor: `${item.color}22`, borderColor: `${item.color}66` }}
+                      >
+                        <i style={{ backgroundColor: item.color }} aria-hidden="true" />
+                        {item.name}
+                      </span>
+                    ))}
+                  </div>
+                ) : <span className="muted" aria-label="Sem classificação">—</span>}
               </td>
               <td>
                 <div className="person-cell">

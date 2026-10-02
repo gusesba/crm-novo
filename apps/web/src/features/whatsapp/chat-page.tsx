@@ -2,6 +2,7 @@
 import { useApp } from "@/components/providers";
 import { Avatar, Empty, ErrorBox, Loading, Modal, PageHeader } from "@/components/ui";
 import { LeadForm } from "@/features/leads/lead-form";
+import { Classifications } from "@/features/leads/classifications";
 import { useResource } from "@/hooks/use-resource";
 import { post } from "@/lib/api";
 import type { Chat, Lead, PageResult, SharedContact } from "@/lib/types";
@@ -51,6 +52,7 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
     matchedLead.chatUserId === user?.id
       ? matchedLead
       : undefined;
+  const classificationLeadId = chats.data?.find((item) => item.id === chat?.id)?.leadId ?? linkedLead?.id;
   useEffect(() => {
     const phone = params.get("phone");
     if (phone && /^\d{10,15}$/.test(phone))
@@ -225,6 +227,7 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
                   {linkedLead ? "· Vinculado ao CRM" : ""}
                 </p>
               </div>
+              {!backup && classificationLeadId && <Classifications key={classificationLeadId} leadId={classificationLeadId} onSaved={chats.reload} />}
               {!backup &&
                 chat.id.endsWith("@s.whatsapp.net") &&
                 (matchedLead ? (
@@ -341,6 +344,7 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
               }
             }
             leadMatch.reload();
+            chats.reload();
           }}
         />
       )}

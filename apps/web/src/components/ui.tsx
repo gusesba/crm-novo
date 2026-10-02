@@ -2,7 +2,7 @@
 import { initials, statusClass } from "@/lib/format";
 import { Inbox, LoaderCircle, X } from "lucide-react";
 import { useApp } from "./providers";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 export function Avatar({
   name,
   small = false,
@@ -136,6 +136,7 @@ export function Modal({
   wide?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
   useEffect(() => {
     const dialog = ref.current!;
     dialog.showModal();
@@ -145,15 +146,18 @@ export function Modal({
     <dialog
       ref={ref}
       className={`modal ${wide ? "modal-wide" : ""}`}
-      onCancel={onClose}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
       onClick={(e) => {
         if (e.target === ref.current) onClose();
       }}
-      aria-labelledby="modal-title"
+      aria-labelledby={titleId}
     >
       <div className="modal-header">
         <div>
-          <h2 id="modal-title">{title}</h2>
+          <h2 id={titleId}>{title}</h2>
           {description && <p>{description}</p>}
         </div>
         <button className="icon-button" onClick={onClose} aria-label="Fechar">
