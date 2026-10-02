@@ -1,6 +1,6 @@
 "use client";
 import { useApp } from "@/components/providers";
-import { Avatar, Empty, ErrorBox, Loading, Modal, PageHeader } from "@/components/ui";
+import { Avatar, Badge, Empty, ErrorBox, Loading, Modal, PageHeader } from "@/components/ui";
 import { LeadForm } from "@/features/leads/lead-form";
 import { Classifications } from "@/features/leads/classifications";
 import { useResource } from "@/hooks/use-resource";
@@ -54,7 +54,9 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
     matchedLead.chatUserId === user?.id
       ? matchedLead
       : undefined;
-  const classificationLeadId = chats.data?.find((item) => item.id === chat?.id)?.leadId ?? linkedLead?.id;
+  const selectedChat = chats.data?.find((item) => item.id === chat?.id);
+  const selectedLeadStatus = selectedChat ? selectedChat.leadStatus : linkedLead?.status;
+  const classificationLeadId = selectedChat?.leadId ?? linkedLead?.id;
   useEffect(() => {
     const phone = params.get("phone");
     if (phone && /^\d{10,15}$/.test(phone))
@@ -241,7 +243,10 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
                 <Avatar name={chat.name} src={pictureUrl(chat.id)} eager />
               </button>
               <div>
-                <h3>{linkedLead?.name || chat.name.split("@")[0]}</h3>
+                <div className="chat-top-name">
+                  <h3>{linkedLead?.name || chat.name.split("@")[0]}</h3>
+                  {selectedLeadStatus && <Badge status={selectedLeadStatus} />}
+                </div>
                 <p>
                   {chat.id.split("@")[0]}{" "}
                   {linkedLead ? "· Vinculado ao CRM" : ""}

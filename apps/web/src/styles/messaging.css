@@ -222,7 +222,8 @@
   display: flex;
   margin-top: 6px;
 }
-.chat-lead-status .badge {
+.chat-lead-status .badge,
+.chat-top-name .badge {
   max-width: 100%;
   white-space: normal;
   overflow-wrap: anywhere;
@@ -303,6 +304,16 @@
 }
 .chat-top h3 {
   font-size: 12px;
+}
+.chat-top-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.chat-top-name h3 {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .chat-top p {
   font-size: 9px;
