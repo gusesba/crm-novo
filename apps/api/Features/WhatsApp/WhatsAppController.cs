@@ -23,7 +23,7 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
         var chats = await client.Send(historyUser, HttpMethod.Get, "chats");
         var linkedLeads = await current.Scope(db.Leads.AsNoTracking())
             .Where(x => x.ChatUserId == historyUser && x.ChatId != null)
-            .Select(x => new { x.Id, x.Name, x.ChatId }).ToListAsync();
+            .Select(x => new { x.Id, x.Name, x.ChatId, x.Status }).ToListAsync();
         var leadsByChat = linkedLeads.ToDictionary(x => x.ChatId!);
         var leadIds = linkedLeads.Select(x => x.Id).ToArray();
         var classifications = await (from m in db.LeadClassifications.AsNoTracking()
@@ -48,6 +48,7 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
                 archived = chat.GetProperty("archived").GetInt32() != 0,
                 pinnedAt = chat.GetProperty("pinnedAt").GetInt64(),
                 leadId = lead?.Id,
+                leadStatus = lead?.Status,
                 classifications = classificationsByLead[lead?.Id ?? 0].Select(x => new { x.Id, x.Name, x.Color })
             };
         });

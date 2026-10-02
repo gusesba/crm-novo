@@ -93,6 +93,7 @@ export interface Chat {
   archived: boolean;
   pinnedAt: number;
   leadId?: number | null;
+  leadStatus?: string | null;
   classifications?: LeadClassification[];
 }
 export interface Message {

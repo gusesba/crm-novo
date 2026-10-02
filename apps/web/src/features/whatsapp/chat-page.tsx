@@ -5,6 +5,7 @@ import { LeadForm } from "@/features/leads/lead-form";
 import { Classifications } from "@/features/leads/classifications";
 import { useResource } from "@/hooks/use-resource";
 import { post } from "@/lib/api";
+import { chatViews, type ChatView } from "@/lib/chat-groups";
 import type { Chat, Lead, PageResult, SharedContact } from "@/lib/types";
 import { Link2, Plus, Search } from "lucide-react";
 import { useSearchParams } from "next/navigation";
@@ -21,6 +22,7 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
   const [profilePhoto, setProfilePhoto] = useState<{ name: string; src: string }>();
   const [photoFailed, setPhotoFailed] = useState(false);
   const [search, setSearch] = useState("");
+  const [views, setViews] = useState<ChatView[]>(["whatsapp"]);
   const [create, setCreate] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead>();
   const [error, setError] = useState("");
@@ -185,6 +187,23 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
               </button>
             )}
           </div>
+          {!backup && (
+            <div className="chat-view-options" role="group" aria-label="Visualizações das conversas">
+              {chatViews.map((view) => (
+                <button
+                  key={view.id}
+                  type="button"
+                  aria-pressed={views.includes(view.id)}
+                  aria-disabled={views.length === 1 && views.includes(view.id)}
+                  onClick={() => setViews((current) => current.includes(view.id)
+                    ? current.length === 1 ? current : current.filter((id) => id !== view.id)
+                    : [...current, view.id])}
+                >
+                  {view.label}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="chat-items">
             {chats.loading && !chats.data ? (
               <Loading />
@@ -200,6 +219,7 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
             ) : (
               <ChatList
                 chats={chats.data}
+                views={backup ? undefined : views}
                 search={search}
                 selected={chat?.id}
                 pictureUrl={pictureUrl}

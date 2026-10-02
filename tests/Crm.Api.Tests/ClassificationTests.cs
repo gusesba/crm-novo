@@ -195,18 +195,30 @@ public class ClassificationTests
         (await Assign(camila, lead.Id, own.Id)).EnsureSuccessStatusCode();
         var unlinked = await camila.GetFromJsonAsync<JsonElement>("/api/whatsapp/chats");
         Assert.Equal(JsonValueKind.Null, unlinked[0].GetProperty("leadId").ValueKind);
+        Assert.Equal(JsonValueKind.Null, unlinked[0].GetProperty("leadStatus").ValueKind);
         Assert.Empty(unlinked[0].GetProperty("classifications").EnumerateArray());
         (await camila.PostAsJsonAsync($"/api/leads/{lead.Id}/link", new { chatId = lead.Phone + "@s.whatsapp.net" })).EnsureSuccessStatusCode();
         var chats = await camila.GetFromJsonAsync<JsonElement>("/api/whatsapp/chats");
         Assert.Equal(lead.Id, chats[0].GetProperty("leadId").GetInt32());
+        Assert.Equal(LeadStatuses.Contact, chats[0].GetProperty("leadStatus").GetString());
         Assert.Equal("Cliente", chats[0].GetProperty("name").GetString());
         Assert.Equal(own.Id, Assert.Single(chats[0].GetProperty("classifications").EnumerateArray()).GetProperty("id").GetInt32());
         Assert.Empty(chats[1].GetProperty("classifications").EnumerateArray());
+        Assert.Equal(JsonValueKind.Null, chats[1].GetProperty("leadStatus").ValueKind);
         var backup = await admin.GetFromJsonAsync<JsonElement>("/api/whatsapp/chats?userId=2");
         Assert.Empty(backup[0].GetProperty("classifications").EnumerateArray());
+        Assert.Equal(LeadStatuses.Contact, backup[0].GetProperty("leadStatus").GetString());
         var personalAdmin = await Create(admin, "Meu lembrete");
         (await Assign(admin, lead.Id, personalAdmin.Id)).EnsureSuccessStatusCode();
         backup = await admin.GetFromJsonAsync<JsonElement>("/api/whatsapp/chats?userId=2");
         Assert.Equal(personalAdmin.Id, Assert.Single(backup[0].GetProperty("classifications").EnumerateArray()).GetProperty("id").GetInt32());
+        lead = (await camila.GetFromJsonAsync<Lead>($"/api/leads/{lead.Id}"))!;
+        (await camila.PutAsJsonAsync($"/api/leads/{lead.Id}", new
+        {
+            branchId = 1, sellerId = 2, name = lead.Name, phone = lead.Phone,
+            status = LeadStatuses.Won, revision = lead.Revision
+        })).EnsureSuccessStatusCode();
+        chats = await camila.GetFromJsonAsync<JsonElement>("/api/whatsapp/chats");
+        Assert.Equal(LeadStatuses.Won, chats[0].GetProperty("leadStatus").GetString());
     }
 }
