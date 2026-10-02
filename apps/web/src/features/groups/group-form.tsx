@@ -4,7 +4,7 @@ import { Badge, ErrorBox, Field, Loading, Modal } from "@/components/ui";
 import { useResource } from "@/hooks/use-resource";
 import { post, put } from "@/lib/api";
 import { date, phone, statuses } from "@/lib/format";
-import type { LeadGroup, Lead } from "@/lib/types";
+import type { LeadGroup, Lead, LeadClassification } from "@/lib/types";
 import { useState, type FormEvent } from "react";
 
 export function GroupForm({
@@ -17,10 +17,12 @@ export function GroupForm({
   onSaved: () => void;
 }) {
   const { user, catalog, notify } = useApp();
+  const classifications = useResource<LeadClassification[]>("/classifications");
   const [selected, setSelected] = useState<number[] | null>(null);
   const [filters, setFilters] = useState({
     search: "",
     status: "",
+    classificationId: "",
     serviceId: "",
     sellerId: "",
     branchId: "",
@@ -37,6 +39,7 @@ export function GroupForm({
   for (const key of [
     "search",
     "status",
+    "classificationId",
     "serviceId",
     "sellerId",
     "branchId",
@@ -109,6 +112,7 @@ export function GroupForm({
       leadIds: ids,
       search: filters.search || null,
       status: filters.status || null,
+      classificationId: filters.classificationId ? Number(filters.classificationId) : null,
       serviceId: filters.serviceId ? Number(filters.serviceId) : null,
       sellerId: filters.sellerId ? Number(filters.sellerId) : null,
       branchId: filters.branchId ? Number(filters.branchId) : null,
@@ -162,6 +166,21 @@ export function GroupForm({
               <option value="">Todos os status</option>
               {statuses.map((s) => (
                 <option key={s}>{s}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Classificação">
+            <select
+              aria-label="Filtrar classificação"
+              value={filters.classificationId}
+              disabled={classifications.loading || !!classifications.error}
+              onChange={(e) => changeFilter("classificationId", e.target.value)}
+            >
+              <option value="">
+                {classifications.loading ? "Carregando classificações…" : "Todas as classificações"}
+              </option>
+              {classifications.data?.map((item) => (
+                <option key={item.id} value={item.id}>{item.name}</option>
               ))}
             </select>
           </Field>
@@ -225,6 +244,9 @@ export function GroupForm({
             />
           </Field>
         </div>
+        {classifications.error && (
+          <ErrorBox message={classifications.error} retry={classifications.reload} />
+        )}
         {invalidDates && (
           <p className="form-note" role="alert">
             A data inicial deve ser anterior ou igual à data final.

@@ -9,6 +9,61 @@ namespace Crm.Api.Tests;
 
 public class GroupLeadTests
 {
+    private static async Task<int> Classify(HttpClient client, params int[] leadIds)
+    {
+        var response = await client.PostAsJsonAsync("/api/classifications", new { name = "Importante", color = "#ffc0cb" });
+        response.EnsureSuccessStatusCode();
+        var id = (await response.Content.ReadFromJsonAsync<LeadClassification>())!.Id;
+        foreach (var leadId in leadIds)
+            (await client.PutAsJsonAsync($"/api/leads/{leadId}/classifications", new { classificationIds = new[] { id } })).EnsureSuccessStatusCode();
+        return id;
+    }
+
+    [Fact]
+    public async Task ClassificationFilterIsPersonalAndPreservesGroupLeadScope()
+    {
+        using var factory = new ApiFactory();
+        using var seller = await factory.Login("camila");
+        using var other = await factory.Login("rafael");
+        using var admin = await factory.Login();
+        var classificationId = await Classify(seller, 1, 2, 4);
+        var otherId = await Classify(other, 1);
+        var candidates = (await seller.GetFromJsonAsync<Lead[]>($"/api/groups/leads?classificationId={classificationId}"))!;
+        Assert.Equal(new[] { 1, 4 }, candidates.Select(x => x.Id).Order().ToArray());
+        foreach (var client in new[] { other, admin })
+            Assert.Empty((await client.GetFromJsonAsync<Lead[]>($"/api/groups/leads?classificationId={classificationId}"))!);
+        Assert.Empty((await seller.GetFromJsonAsync<Lead[]>($"/api/groups/leads?classificationId={otherId}"))!);
+        Assert.Empty((await seller.GetFromJsonAsync<Lead[]>("/api/groups/leads?classificationId=999999"))!);
+        var created = await seller.PostAsJsonAsync("/api/groups", new { name = "Classificados", classificationId });
+        created.EnsureSuccessStatusCode();
+        var groupId = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt32();
+        var detail = await seller.GetFromJsonAsync<JsonElement>($"/api/groups/{groupId}");
+        Assert.Equal(new[] { 1, 4 }, detail.GetProperty("members").EnumerateArray().Select(x => x.GetProperty("id").GetInt32()).Order().ToArray());
+        Assert.Equal(HttpStatusCode.Forbidden, (await seller.PostAsJsonAsync("/api/groups", new { name = "Outro vendedor", classificationId, leadIds = new[] { 2 } })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.PostAsJsonAsync("/api/groups", new { name = "Classificação alheia", classificationId, leadIds = new[] { 1 } })).StatusCode);
+    }
+
+    [Fact]
+    public async Task ClassificationCombinesWithFiltersAndIsRevalidatedWhenSaving()
+    {
+        using var factory = new ApiFactory();
+        using var seller = await factory.Login("camila");
+        var classificationId = await Classify(seller, 1, 4);
+        var candidates = (await seller.GetFromJsonAsync<Lead[]>($"/api/groups/leads?classificationId={classificationId}&status={Uri.EscapeDataString(LeadStatuses.Contact)}&serviceId=1&search=Mariana"))!;
+        Assert.Equal(1, Assert.Single(candidates).Id);
+        var created = await seller.PostAsJsonAsync("/api/groups", new { name = "Filtrado", classificationId, status = LeadStatuses.Contact, serviceId = 1, search = "Mariana", leadIds = new[] { 1 } });
+        created.EnsureSuccessStatusCode();
+        var groupId = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt32();
+        (await seller.PutAsJsonAsync("/api/leads/1/classifications", new { classificationIds = Array.Empty<int>() })).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Forbidden, (await seller.PutAsJsonAsync($"/api/groups/{groupId}", new { name = "Não deve salvar", classificationId, leadIds = new[] { 1 } })).StatusCode);
+        var detail = await seller.GetFromJsonAsync<JsonElement>($"/api/groups/{groupId}");
+        Assert.Equal("Filtrado", detail.GetProperty("name").GetString());
+        Assert.Equal(1, Assert.Single(detail.GetProperty("members").EnumerateArray()).GetProperty("id").GetInt32());
+        (await seller.PutAsJsonAsync($"/api/groups/{groupId}", new { name = "Atualizado", classificationId, leadIds = new[] { 4 } })).EnsureSuccessStatusCode();
+        detail = await seller.GetFromJsonAsync<JsonElement>($"/api/groups/{groupId}");
+        Assert.Equal(4, Assert.Single(detail.GetProperty("members").EnumerateArray()).GetProperty("id").GetInt32());
+    }
+
     [Fact]
     public async Task GlobalAdminCanSelectUnlinkedLeadsFromMultipleSellersAndBranches()
     {

@@ -18,8 +18,8 @@ public class GroupsController(CrmDbContext db, CurrentUser current) : Controller
             .Select(x => new { x.Id, x.Name, count = x.Members.Count(m => leads.Any(l => l.Id == m.LeadId)) }).ToListAsync();
     }
     [HttpGet("leads")]
-    public async Task<List<Lead>> Leads(string? status, int? serviceId, int? sellerId, int? branchId, DateTime? createdFrom, DateTime? createdTo, string? search)
-        => await FilterLeads(status, serviceId, sellerId, branchId, createdFrom, createdTo, search)
+    public async Task<List<Lead>> Leads(string? status, int? serviceId, int? sellerId, int? branchId, DateTime? createdFrom, DateTime? createdTo, string? search, int? classificationId)
+        => await FilterLeads(status, serviceId, sellerId, branchId, createdFrom, createdTo, search, classificationId)
             .AsNoTracking().OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id).ToListAsync();
     [HttpGet("{id:int}")]
     public async Task<object> Get(int id)
@@ -48,7 +48,7 @@ public class GroupsController(CrmDbContext db, CurrentUser current) : Controller
         var query = current.Scope(db.Leads);
         return current.IsAdmin ? query : query.Where(x => x.CurrentSellerId == current.Id);
     }
-    private IQueryable<Lead> FilterLeads(string? status, int? serviceId, int? sellerId, int? branchId, DateTime? createdFrom, DateTime? createdTo, string? search)
+    private IQueryable<Lead> FilterLeads(string? status, int? serviceId, int? sellerId, int? branchId, DateTime? createdFrom, DateTime? createdTo, string? search, int? classificationId)
     {
         if (sellerId.HasValue && !current.IsAdmin) throw new BusinessException("Filtro de vendedor disponível apenas para administradores.", 403);
         if (branchId.HasValue && !(current.IsAdmin && current.BranchId == null)) throw new BusinessException("Filtro de sede disponível apenas para o administrador geral.", 403);
@@ -58,6 +58,9 @@ public class GroupsController(CrmDbContext db, CurrentUser current) : Controller
         if (serviceId.HasValue) query = query.Where(x => x.ServiceId == serviceId);
         if (sellerId.HasValue) query = query.Where(x => x.CurrentSellerId == sellerId);
         if (branchId.HasValue) query = query.Where(x => x.BranchId == branchId);
+        if (classificationId.HasValue)
+            query = query.Where(x => db.LeadClassifications.Any(m => m.LeadId == x.Id && m.ClassificationId == classificationId &&
+                db.Classifications.Any(c => c.Id == m.ClassificationId && c.UserId == current.Id)));
         if (createdFrom.HasValue) query = query.Where(x => x.CreatedAt >= createdFrom.Value);
         if (createdTo.HasValue) query = query.Where(x => x.CreatedAt < createdTo.Value);
         if (!string.IsNullOrWhiteSpace(search))
@@ -69,7 +72,7 @@ public class GroupsController(CrmDbContext db, CurrentUser current) : Controller
     }
     private async Task SetMembers(ContactGroup group, GroupRequest r)
     {
-        var query = FilterLeads(r.Status, r.ServiceId, r.SellerId, r.BranchId, r.CreatedFrom, r.CreatedTo, r.Search);
+        var query = FilterLeads(r.Status, r.ServiceId, r.SellerId, r.BranchId, r.CreatedFrom, r.CreatedTo, r.Search, r.ClassificationId);
         if (r.LeadIds != null) query = query.Where(x => r.LeadIds.Contains(x.Id));
         var ids = await query.Select(x => x.Id).ToListAsync();
         if (r.LeadIds != null && ids.Count != r.LeadIds.Distinct().Count()) throw new BusinessException("Há leads fora do seu escopo.", 403);
@@ -78,4 +81,4 @@ public class GroupsController(CrmDbContext db, CurrentUser current) : Controller
     }
 }
 public record GroupRequest([Required, MaxLength(160)] string Name, int[]? LeadIds, string? Status, int? ServiceId,
-    int? SellerId = null, int? BranchId = null, DateTime? CreatedFrom = null, DateTime? CreatedTo = null, string? Search = null);
+    int? SellerId = null, int? BranchId = null, DateTime? CreatedFrom = null, DateTime? CreatedTo = null, string? Search = null, int? ClassificationId = null);

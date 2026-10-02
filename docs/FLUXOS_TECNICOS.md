@@ -17,7 +17,7 @@ Os exemplos usam JSON com propriedades camelCase, como recebido/enviado pelo nav
 | `/leads`, `/my-leads`, `/sales` | Consulta geral/pessoal/vendas, busca, filtros (incluindo classificação pessoal), paginação, etiquetas coloridas na tabela, detalhe, criação, edição comercial/de contato, mudança de status, exclusão e transferências | 6 |
 | Leads ↔ conversas | Resolver telefone/variantes, confirmar troca de telefone, abrir conversa, vincular explicitamente e criar/editar lead a partir do chat | 7 |
 | `/appointments` | Agenda geral/pessoal/por lead, concluídos, paginação, criação, edição, conclusão, reabertura e exclusão | 8 |
-| `/groups` | Listar grupos internos, filtrar candidatos, seleção em várias páginas, criar, renomear, substituir participantes e excluir | 9 |
+| `/groups` | Listar grupos internos, filtrar candidatos (incluindo classificação pessoal), seleção em várias páginas, criar, renomear, substituir participantes e excluir | 9 |
 | `/settings` | Equipe, senha/perfil/sede, ativação e inativação de usuários, sedes, serviços e condições de venda | 10 |
 | `/whatsapp`, `/campaigns` | Sessão pessoal, QR Code, status, desconexão, reconexão e restauração | 11 |
 | `/whatsapp` | Lista/busca de conversas, visualizações combináveis WhatsApp/status/classificação com grupos recolhíveis, arquivadas/fixadas, fotos, histórico, mensagens anteriores, nova conversa e bolinhas/seleção múltipla de classificações do lead vinculado | 12 |
@@ -373,11 +373,12 @@ Fontes: [groups-page.tsx](../apps/web/src/features/groups/groups-page.tsx), [gro
 
 ### 9.2 Buscar candidatos e selecionar
 
-1. Abrir formulário → `GET /api/groups/leads` com opcionais search/status/serviceId/sellerId/branchId/createdFrom/createdTo.
+1. Abrir formulário de criação/edição → `GET /api/groups/leads` com opcionais search/status/classificationId/serviceId/sellerId/branchId/createdFrom/createdTo. O seletor Classificação consulta `GET /api/classifications` somente com opções pessoais; “Todas as classificações” remove esse filtro. Carregamento/falha do catálogo desabilita apenas o seletor; falha mostra ErrorBox/retry, preservando os demais filtros.
 2. API devolve **array completo**, sem paginação, ordenado CreatedAt desc/Id. Front pagina localmente em blocos de vinte; selecionar tudo inclui todas as páginas filtradas.
 3. Filtro vendedor só admin (`403` se vendedor enviar); filtro sede só admin global (`403` para outros). Data inicial maior que final → `400`; frontend evita consulta inválida.
 4. Front transforma início local em UTC e data final no início do dia seguinte; API usa `>= createdFrom` e `< createdTo`, tornando o dia final escolhido inclusivo na interface.
-5. Alterar filtro limpa seleção e volta à página 1; ao editar, membros atuais são priorizados no array. Não Enviar Mais pode pertencer ao grupo, mas não receber campanhas.
+5. Alterar filtro, incluindo classificação, limpa seleção e volta à página 1; ao editar, membros atuais são priorizados no array. Não Enviar Mais pode pertencer ao grupo, mas não receber campanhas.
+6. classificationId combina com todos os demais filtros e restringe candidatos a leads marcados nessa classificação do usuário autenticado, inclusive para administradores. Mantém escopo de sede/carteira; ID alheio/inexistente retorna array vazio, sem expor o catálogo de terceiros. Sem resultados, mostra “Nenhum lead encontrado com estes filtros”.
 
 ### 9.3 Criar/renomear/adicionar/remover membros
 
@@ -386,6 +387,7 @@ Fontes: [groups-page.tsx](../apps/web/src/features/groups/groups-page.tsx), [gro
   "name": "Interessados em habilitação",
   "leadIds": [42, 43],
   "status": "Agendar Contato",
+  "classificationId": null,
   "serviceId": 1,
   "sellerId": null,
   "branchId": null,
@@ -396,7 +398,7 @@ Fontes: [groups-page.tsx](../apps/web/src/features/groups/groups-page.tsx), [gro
 ```
 
 1. Submit → `POST /api/groups` ou `PUT /api/groups/{id}`; nome required até 160, trim no back.
-2. Back reaplica escopo e todos os filtros, depois LeadIds. IDs informados precisam corresponder aos distintos efetivamente acessíveis/filtrados; seleção inválida → `403`.
+2. Back reaplica escopo e todos os filtros, inclusive classificationId pessoal, depois LeadIds. IDs informados precisam corresponder aos distintos efetivamente acessíveis/filtrados; seleção inválida → `403`. Se uma marcação for removida entre seleção e salvamento, rejeita os IDs que não pertencem mais ao filtro. Falha não grava nome nem participantes parcialmente; formulário permanece aberto com erro. Cancelar fecha sem enviar POST/PUT.
 3. Novo grupo tem UserId atual. Edição busca grupo do próprio usuário. `SetMembers` remove relações fora da nova seleção e adiciona as faltantes.
 4. POST → `200 {id,name}`; PUT → `204`. Front notifica/fecha/recarrega cards; falha preserva formulário.
 5. Grupo vazio é permitido (`leadIds:[]`). API aceita `leadIds:null` para pegar todos os resultados da filtragem, mas o formulário atual sempre envia um array explícito.
@@ -824,6 +826,8 @@ Estes pontos são parte do fluxo implementado e devem ser considerados ao valida
 
 ## 20. Rastreabilidade e conferência da documentação
 
+Na entrega do filtro de classificação no formulário de grupos de 02/10/2026, passaram os sete casos de GroupLeadTests e o build/tipos do frontend. Os testes confirmaram classificação pessoal inclusive para admins, manutenção do escopo de carteira, combinação com status/serviço/busca, criação/edição filtradas e rejeição sem alterações parciais após remover uma marcação. Na interface com banco isolado, foram conferidos limpeza da seleção ao trocar a classificação, candidatos filtrados e criação de grupo somente com os dois leads classificados selecionados.
+
 O levantamento percorreu todas as páginas de `apps/web/src/app`, componentes funcionais em `features`, Provider/cliente HTTP/hook de recursos, todos os controllers de `apps/api/Features`, regras/entidades/índices do CRM e rotas/sessões/messaging/campaigns/storage do serviço WhatsApp. CSS e screenshots não foram usados para inferir comportamento de back.
 
 Na entrega do filtro de classificação em Disparos de 02/10/2026, passaram os 12 casos de CampaignAudienceTests e o build/tipos do frontend. Os testes confirmaram privacidade inclusive para admin global, exclusão de OptOut, paginação após filtrar, combinação com grupo/status/serviço/exclusões, destinatários encaminhados ao serviço simulado e rejeição após remover uma classificação antes da confirmação. Na interface com banco/serviço simulados, foram conferidos retorno à página 1, contagem/seleção dos classificados e prévia contendo somente esses destinatários, sem enviar mensagens reais.
@@ -836,7 +840,7 @@ Foram conferidos os cenários declarados na suíte existente, sem executar envio
 | [LeadScopeTests.cs](../tests/Crm.Api.Tests/LeadScopeTests.cs), [LeadEditingTests.cs](../tests/Crm.Api.Tests/LeadEditingTests.cs) | Leitura/edição por sede/carteira, proteção de contato, exclusão |
 | [LeadConversationTests.cs](../tests/Crm.Api.Tests/LeadConversationTests.cs) | Variantes, confirmação, duplicidade, conversa existente e número ausente |
 | [ClassificationTests.cs](../tests/Crm.Api.Tests/ClassificationTests.cs) | Isolamento pessoal inclusive para admin, cores/nomes/payloads inválidos, escopo de leads, seleção múltipla/remoção/cascata, rejeição atômica de IDs alheios, bolinhas com vínculo explícito/backup e etiquetas/filtro pessoal na listagem antes da paginação, combinado com carteira/vendas/serviço/sede/vendedor e preservando o escopo de sede |
-| [GroupLeadTests.cs](../tests/Crm.Api.Tests/GroupLeadTests.cs) | Seleção sem vínculo, filtros combinados, escopo e seleção além de cem |
+| [GroupLeadTests.cs](../tests/Crm.Api.Tests/GroupLeadTests.cs) | Seleção sem vínculo, filtros combinados incluindo classificação pessoal, privacidade/escopo, revalidação ao salvar e seleção além de cem |
 | [CampaignAudienceTests.cs](../tests/Crm.Api.Tests/CampaignAudienceTests.cs) | Público de outros vendedores, filtros, classificação pessoal antes da paginação, combinação com grupo/seleção/exclusões, revalidação na confirmação e elegibilidade |
 | [DashboardScopeTests.cs](../tests/Crm.Api.Tests/DashboardScopeTests.cs), [DashboardPeriodTests.cs](../tests/Crm.Api.Tests/DashboardPeriodTests.cs) | Período inclusivo, indicadores e agenda por sede |
 | [UserRegistrationTests.cs](../tests/Crm.Api.Tests/UserRegistrationTests.cs) | Cadastro administrativo e limites de sede |

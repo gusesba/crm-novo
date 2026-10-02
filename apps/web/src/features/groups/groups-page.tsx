@@ -50,7 +50,7 @@ export function GroupsPage() {
         <section className="panel">
           <Empty
             title="Seu primeiro público começa aqui"
-            description="Filtre por serviço, status e data de cadastro e selecione os leads do grupo."
+            description="Filtre por classificação, serviço, status e data de cadastro e selecione os leads do grupo."
             action={
               <button
                 className="button secondary"
