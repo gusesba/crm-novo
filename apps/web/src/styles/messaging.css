@@ -218,6 +218,15 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+.chat-lead-status {
+  display: flex;
+  margin-top: 6px;
+}
+.chat-lead-status .badge {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .classification-new {
   border-top: 1px solid #e5e5e5;
   margin: 6px 12px 0;

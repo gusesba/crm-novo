@@ -1,4 +1,4 @@
-import { Avatar, Empty } from "@/components/ui";
+import { Avatar, Badge, Empty } from "@/components/ui";
 import { date } from "@/lib/format";
 import type { Chat } from "@/lib/types";
 import { Archive, ChevronDown, ChevronRight, Pin } from "lucide-react";
@@ -40,6 +40,11 @@ function ChatItem({ chat, selected, pictureUrl, onSelect, onOpenPhoto }: ItemPro
         <div>
           <div className="chat-name"><strong>{name}</strong><ClassificationDots items={chat.classifications} /></div>
           <p>{chat.lastText}</p>
+          {chat.leadId != null && chat.leadStatus && (
+            <div className="chat-lead-status">
+              <Badge status={chat.leadStatus} />
+            </div>
+          )}
         </div>
         <span className="chat-item-meta">
           {chat.pinnedAt > 0 && <Pin size={11} aria-label="Conversa fixada" />}
