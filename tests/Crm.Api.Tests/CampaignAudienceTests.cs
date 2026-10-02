@@ -3,12 +3,94 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Crm.Api.Domain;
 using Crm.Api.Infrastructure;
+using Crm.Api.Features.WhatsApp;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Crm.Api.Tests;
 
 public class CampaignAudienceTests
 {
+    private class CampaignHandler : HttpMessageHandler
+    {
+        public List<int[]> Recipients { get; } = [];
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var payload = await request.Content!.ReadFromJsonAsync<JsonElement>(cancellationToken);
+            Recipients.Add(payload.GetProperty("recipients").EnumerateArray().Select(x => x.GetProperty("leadId").GetInt32()).ToArray());
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(new { id = "test-campaign" }) };
+        }
+    }
+
+    private class CampaignFactory : ApiFactory
+    {
+        public CampaignHandler Handler { get; } = new();
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.ConfigureServices(services => services.AddHttpClient<WhatsAppClient>()
+                .ConfigurePrimaryHttpMessageHandler(() => Handler));
+        }
+    }
+
+    private static async Task<int> Classify(HttpClient client, params int[] leadIds)
+    {
+        var response = await client.PostAsJsonAsync("/api/classifications", new { name = "Importante", color = "#ffc0cb" });
+        response.EnsureSuccessStatusCode();
+        var id = (await response.Content.ReadFromJsonAsync<LeadClassification>())!.Id;
+        foreach (var leadId in leadIds)
+            (await client.PutAsJsonAsync($"/api/leads/{leadId}/classifications", new { classificationIds = new[] { id } })).EnsureSuccessStatusCode();
+        return id;
+    }
+
+    [Fact]
+    public async Task ClassificationFilterIsPersonalAndAppliedBeforePagination()
+    {
+        using var factory = new ApiFactory();
+        using var seller = await factory.Login("camila");
+        using var other = await factory.Login("rafael");
+        using var admin = await factory.Login();
+        var classificationId = await Classify(seller, 1, 2, 8);
+        var otherId = await Classify(other, 1);
+        var first = await seller.GetFromJsonAsync<JsonElement>($"/api/whatsapp/campaign-recipients?classificationId={classificationId}&pageSize=1");
+        var second = await seller.GetFromJsonAsync<JsonElement>($"/api/whatsapp/campaign-recipients?classificationId={classificationId}&pageSize=1&page=2");
+        Assert.Equal(2, first.GetProperty("total").GetInt32());
+        var ids = new[] { Assert.Single(first.GetProperty("items").EnumerateArray()).GetProperty("id").GetInt32(),
+            Assert.Single(second.GetProperty("items").EnumerateArray()).GetProperty("id").GetInt32() };
+        Assert.Equal(new[] { 1, 2 }, ids.Order().ToArray());
+        foreach (var client in new[] { other, admin })
+        {
+            var hidden = await client.GetFromJsonAsync<JsonElement>($"/api/whatsapp/campaign-recipients?classificationId={classificationId}");
+            Assert.Equal(0, hidden.GetProperty("total").GetInt32());
+            Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/whatsapp/campaigns/preview", new { classificationId })).StatusCode);
+        }
+        var otherLabel = await seller.GetFromJsonAsync<JsonElement>($"/api/whatsapp/campaign-recipients?classificationId={otherId}");
+        Assert.Equal(0, otherLabel.GetProperty("total").GetInt32());
+    }
+
+    [Fact]
+    public async Task ClassificationCombinesWithGroupAndSelectionAndIsRevalidatedOnConfirmation()
+    {
+        using var factory = new CampaignFactory();
+        using var seller = await factory.Login("camila");
+        var classificationId = await Classify(seller, 1, 2);
+        var groupResponse = await seller.PostAsJsonAsync("/api/groups", new { name = "Grupo classificado" });
+        groupResponse.EnsureSuccessStatusCode();
+        var groupId = (await groupResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt32();
+        var preview = await seller.PostAsJsonAsync("/api/whatsapp/campaigns/preview", new { classificationId, groupId, status = LeadStatuses.Contact, serviceId = 1 });
+        preview.EnsureSuccessStatusCode();
+        Assert.Equal(1, Assert.Single((await preview.Content.ReadFromJsonAsync<Lead[]>())!).Id);
+        var excluded = await seller.PostAsJsonAsync("/api/whatsapp/campaigns/preview", new { classificationId, excludedLeadIds = new[] { 2 } });
+        excluded.EnsureSuccessStatusCode();
+        Assert.Equal(1, Assert.Single((await excluded.Content.ReadFromJsonAsync<Lead[]>())!).Id);
+        var payload = new { name = "Filtro pessoal", messages = new[] { new { text = "Teste" } }, classificationId, leadIds = new[] { 1, 2 } };
+        (await seller.PostAsJsonAsync("/api/whatsapp/campaigns", payload)).EnsureSuccessStatusCode();
+        Assert.Equal(new[] { 1, 2 }, Assert.Single(factory.Handler.Recipients).Order().ToArray());
+        (await seller.PutAsJsonAsync("/api/leads/2/classifications", new { classificationIds = Array.Empty<int>() })).EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict, (await seller.PostAsJsonAsync("/api/whatsapp/campaigns", payload)).StatusCode);
+        Assert.Single(factory.Handler.Recipients);
+    }
+
     [Theory]
     [InlineData("/api/leads", "Mariana")]
     [InlineData("/api/whatsapp/campaign-recipients", "Mariana")]

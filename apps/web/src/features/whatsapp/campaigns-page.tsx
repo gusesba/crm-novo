@@ -11,7 +11,7 @@ import {
 import { useResource } from "@/hooks/use-resource";
 import { post } from "@/lib/api";
 import { statuses } from "@/lib/format";
-import type { LeadGroup, Lead, PageResult } from "@/lib/types";
+import type { LeadGroup, Lead, LeadClassification, PageResult } from "@/lib/types";
 import { Radio, Send } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import {
@@ -23,6 +23,7 @@ import { Connection } from "./connection";
 export function CampaignsPage() {
   const { user, catalog, notify } = useApp();
   const groups = useResource<LeadGroup[]>("/groups");
+  const classifications = useResource<LeadClassification[]>("/classifications");
   const [messages, setMessages] = useState<CampaignMessageDraft[]>([
     { id: "message-1", text: "" },
   ]);
@@ -35,6 +36,7 @@ export function CampaignsPage() {
   const [filters, setFilters] = useState({
     search: "",
     status: "",
+    classificationId: "",
     serviceId: "",
     sellerId: "",
     branchId: "",
@@ -61,6 +63,7 @@ export function CampaignsPage() {
   const audience = {
     groupId: mode === "group" ? Number(filters.groupId) || null : null,
     status: filters.status || null,
+    classificationId: Number(filters.classificationId) || null,
     serviceId: Number(filters.serviceId) || null,
     sellerId: Number(filters.sellerId) || null,
     branchId: Number(filters.branchId) || null,
@@ -214,6 +217,21 @@ export function CampaignsPage() {
                     ))}
                 </select>
               </Field>
+              <Field label="Classificação">
+                <select
+                  aria-label="Filtrar classificação"
+                  value={filters.classificationId}
+                  disabled={classifications.loading || !!classifications.error}
+                  onChange={(e) => changeFilter("classificationId", e.target.value)}
+                >
+                  <option value="">
+                    {classifications.loading ? "Carregando classificações…" : "Todas as classificações"}
+                  </option>
+                  {classifications.data?.map((item) => (
+                    <option key={item.id} value={item.id}>{item.name}</option>
+                  ))}
+                </select>
+              </Field>
               <Field label="Serviço">
                 <select
                   value={filters.serviceId}
@@ -279,6 +297,9 @@ export function CampaignsPage() {
             </Field>
             {groups.error && (
               <ErrorBox message={groups.error} retry={groups.reload} />
+            )}
+            {classifications.error && (
+              <ErrorBox message={classifications.error} retry={classifications.reload} />
             )}
             {leads.error && (
               <ErrorBox message={leads.error} retry={leads.reload} />

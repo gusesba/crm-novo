@@ -24,7 +24,7 @@ Os exemplos usam JSON com propriedades camelCase, como recebido/enviado pelo nav
 | Compositor e mensagens | Texto, emoji, resposta, edição, reação/remoção de reação, encaminhamento, exclusão local/para todos | 13 |
 | Anexos e contatos | Fotos, vídeos, documentos, áudio, gravação de voz, figurinhas recentes/criadas, vCard, telefone detectado no texto, copiar número, prévia/download de mídia | 14 |
 | Serviço WhatsApp | Receber/sincronizar mensagens, contatos e estados de chats; persistir edição, reação e revogação | 15 |
-| `/campaigns` | Público por filtros/grupo/seleção/exclusões, sequência, prévia local, confirmação, fila, intervalos/pausas, resultados/detalhes e cancelamento | 16 |
+| `/campaigns` | Público por filtros (incluindo classificação pessoal)/grupo/seleção/exclusões, sequência, prévia local, confirmação, fila, intervalos/pausas, resultados/detalhes e cancelamento | 16 |
 | `/backup` | Consulta ao histórico pessoal e consulta administrativa a outras sessões permitidas | 17 |
 | Operação | Health checks, encerramento dos workers/sockets e persistência | 18 |
 | Limites e diferenças reais | Funcionalidades ausentes, divergências e detalhes que alteram o fluxo | 19 |
@@ -692,8 +692,8 @@ Fontes: [campaigns-page.tsx](../apps/web/src/features/whatsapp/campaigns-page.ts
 
 1. Entrada em `/campaigns` → monta Connection, `GET /api/groups`, lista de candidatos e histórico de campanhas.
 2. Modos Todos os contatos/Grupos. Em Grupos sem groupId, não consulta candidatos; selecionar grupo habilita a consulta.
-3. `GET /api/whatsapp/campaign-recipients?page=1&pageSize=20` com opcionais groupId/status/serviceId/sellerId/branchId/search.
-4. API aplica sede, exclui OptOut e sedes inativas. Vendedor pode incluir leads de **outros vendedores da mesma sede**; filtro sellerId só admin; branchId só admin global. Grupo precisa pertencer ao usuário (`404`). Grupo e filtros sempre se combinam.
+3. `GET /api/whatsapp/campaign-recipients?page=1&pageSize=20` com opcionais groupId/status/classificationId/serviceId/sellerId/branchId/search. O filtro Classificação carrega `GET /api/classifications`, somente com as classificações pessoais; “Todas as classificações” remove o filtro. Durante carregamento/falha do catálogo, desabilita apenas esse seletor; falha mostra ErrorBox/retry e mantém os demais filtros disponíveis.
+4. API aplica sede, exclui OptOut e sedes inativas. Vendedor pode incluir leads de **outros vendedores da mesma sede**; filtro sellerId só admin; branchId só admin global. Grupo precisa pertencer ao usuário (`404`). Grupo e filtros sempre se combinam. classificationId exige uma marcação do lead nessa classificação pertencente ao usuário autenticado, inclusive para administradores; ID alheio/inexistente retorna zero candidatos. A restrição é aplicada antes da paginação/contagem e também na prévia e confirmação, junto com os demais filtros, seleção e exclusões. Sem correspondências, tabela mostra “Nenhum lead encontrado com estes filtros”.
 5. Nome/telefone por substring, ordenação Name/Id → `{items:[Lead],total,page,pageSize}`. Não precisa vínculo com chat nem conversa anterior.
 6. Marcar todos inclui todos os resultados em todas as páginas (`leadIds:null`); desmarcar indivíduos alimenta excludedLeadIds. Seleção manual após desmarcar todos alimenta leadIds explícitos.
 7. Alterar modo/filtro limpa selected/excluded, restaura todos selecionados e volta página 1; mudar sede também limpa filtro vendedor. Busca não tem debounce nessa página.
@@ -718,6 +718,7 @@ Fontes: [campaigns-page.tsx](../apps/web/src/features/whatsapp/campaigns-page.ts
   "excludedLeadIds": [43],
   "groupId": null,
   "status": "Agendar Contato",
+  "classificationId": null,
   "serviceId": null,
   "sellerId": null,
   "branchId": null,
@@ -733,7 +734,7 @@ Fontes: [campaigns-page.tsx](../apps/web/src/features/whatsapp/campaigns-page.ts
 3. LeadIds explícitos precisam corresponder à quantidade distinta selecionada após filtros/exclusões; mudança/ineligibilidade → `409`; zero ou mais de 500 → `400`.
 4. Retorna array completo de leads; modal mostra nomes/telefones/status e permite retirar destinatários ou desmarcar tudo. Cancelar fecha modal sem campanha.
 5. Confirmar exige ao menos um confirmedId → `POST /api/whatsapp/campaigns` com payload e `leadIds:confirmedIds`. API valida mensagens (1–10, conteúdo), soma anexos, ranges e variância; recalcula público com mesmos filtros e seleção.
-6. Mudança entre preview e confirmação pode rejeitar a criação. Preview não testa conexão nem conteúdo pelo contrato completo; confirmação pode falhar nessas etapas posteriores.
+6. Mudança entre preview e confirmação pode rejeitar a criação, inclusive remoção de uma classificação filtrada: se parte dos IDs confirmados não corresponder mais ao público → `409`; público vazio → `400`. Mantém a configuração e não inicia campanha. Preview não testa conexão nem conteúdo pelo contrato completo; confirmação pode falhar nessas etapas posteriores. Classificação serve para selecionar/confirmar o público; o worker recebe somente o snapshot de destinatários e não revalida classificações durante a execução.
 
 ### 16.4 Criar campanha persistida e iniciar worker
 
@@ -825,6 +826,8 @@ Estes pontos são parte do fluxo implementado e devem ser considerados ao valida
 
 O levantamento percorreu todas as páginas de `apps/web/src/app`, componentes funcionais em `features`, Provider/cliente HTTP/hook de recursos, todos os controllers de `apps/api/Features`, regras/entidades/índices do CRM e rotas/sessões/messaging/campaigns/storage do serviço WhatsApp. CSS e screenshots não foram usados para inferir comportamento de back.
 
+Na entrega do filtro de classificação em Disparos de 02/10/2026, passaram os 12 casos de CampaignAudienceTests e o build/tipos do frontend. Os testes confirmaram privacidade inclusive para admin global, exclusão de OptOut, paginação após filtrar, combinação com grupo/status/serviço/exclusões, destinatários encaminhados ao serviço simulado e rejeição após remover uma classificação antes da confirmação. Na interface com banco/serviço simulados, foram conferidos retorno à página 1, contagem/seleção dos classificados e prévia contendo somente esses destinatários, sem enviar mensagens reais.
+
 Foram conferidos os cenários declarados na suíte existente, sem executar envios reais. Na entrega de classificações pessoais e seu filtro na tabela de 02/10/2026, os 58 testes da API passaram (incluindo ClassificationTests), assim como a checagem de tipos e o build de produção do frontend. A interface foi conferida com banco e serviço WhatsApp simulados, incluindo criação no menu compacto, seleção múltipla por item com salvamento automático, bolinhas, persistência ao reabrir e falha de gravação com retorno à seleção anterior. A correção da piscada foi verificada ao marcar/desmarcar com resposta de gravação atrasada em dois segundos: a lista manteve tamanho, posição, foco e opacidade durante e após a requisição. Na tabela foram conferidas etiquetas coloridas, filtro pessoal com retorno à primeira página, atualização após fechar o detalhe sem salvar o formulário e Escape fechando apenas o seletor aninhado:
 
 | Evidência no repositório | Regras/caminhos corroborados |
@@ -834,7 +837,7 @@ Foram conferidos os cenários declarados na suíte existente, sem executar envio
 | [LeadConversationTests.cs](../tests/Crm.Api.Tests/LeadConversationTests.cs) | Variantes, confirmação, duplicidade, conversa existente e número ausente |
 | [ClassificationTests.cs](../tests/Crm.Api.Tests/ClassificationTests.cs) | Isolamento pessoal inclusive para admin, cores/nomes/payloads inválidos, escopo de leads, seleção múltipla/remoção/cascata, rejeição atômica de IDs alheios, bolinhas com vínculo explícito/backup e etiquetas/filtro pessoal na listagem antes da paginação, combinado com carteira/vendas/serviço/sede/vendedor e preservando o escopo de sede |
 | [GroupLeadTests.cs](../tests/Crm.Api.Tests/GroupLeadTests.cs) | Seleção sem vínculo, filtros combinados, escopo e seleção além de cem |
-| [CampaignAudienceTests.cs](../tests/Crm.Api.Tests/CampaignAudienceTests.cs) | Público de outros vendedores, filtros, exclusões, confirmação e elegibilidade |
+| [CampaignAudienceTests.cs](../tests/Crm.Api.Tests/CampaignAudienceTests.cs) | Público de outros vendedores, filtros, classificação pessoal antes da paginação, combinação com grupo/seleção/exclusões, revalidação na confirmação e elegibilidade |
 | [DashboardScopeTests.cs](../tests/Crm.Api.Tests/DashboardScopeTests.cs), [DashboardPeriodTests.cs](../tests/Crm.Api.Tests/DashboardPeriodTests.cs) | Período inclusivo, indicadores e agenda por sede |
 | [UserRegistrationTests.cs](../tests/Crm.Api.Tests/UserRegistrationTests.cs) | Cadastro administrativo e limites de sede |
 | [history.test.ts](../apps/whatsapp/test/history.test.ts) | Cursor, isolamento, metadados, nomes, fixadas/arquivadas, reações e exclusão |
