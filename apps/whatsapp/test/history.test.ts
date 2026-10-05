@@ -36,6 +36,50 @@ const message = (id: string, text = id): WAMessage => ({
   pushName: "Cliente",
 });
 
+test("Status com número alternativo não entra na conversa nem altera sua prévia", () => {
+  const user = "status-filter";
+  saveMessage(user, message("real-message"));
+  for (const remoteJidAlt of [undefined, chat]) {
+    saveMessage(user, {
+      ...message("story"),
+      key: { id: "story", remoteJid: "status@broadcast", remoteJidAlt, participant: chat },
+      messageTimestamp: 200,
+      message: { imageMessage: { caption: "Story" } },
+      pushName: "Nome do story",
+    });
+  }
+  assert.equal(rawMessage(user, "story"), undefined);
+  assert.deepEqual(listMessages(user, chat).map((item) => item.id), ["real-message"]);
+  const chats = listChats(user) as { id: string; lastText: string; updatedAt: number }[];
+  assert.equal(chats.length, 1);
+  assert.equal(chats[0].lastText, "real-message");
+  assert.equal(chats[0].updatedAt, 100_000);
+  assert.equal(contactName(user, chat), "Cliente");
+});
+
+test("resposta enviada numa conversa a um Status continua sendo mensagem real", () => {
+  const user = "status-reply";
+  saveMessage(user, {
+    ...message("reply"),
+    message: { extendedTextMessage: {
+      text: "Gostei do story",
+      contextInfo: { remoteJid: "status@broadcast", stanzaId: "story" },
+    } },
+  });
+  assert.equal(listMessages(user, chat)[0].text, "Gostei do story");
+});
+
+test("número alternativo não transfere mensagem de grupo para conversa individual", () => {
+  const user = "group-alt";
+  const group = "120363000000000001@g.us";
+  saveMessage(user, {
+    ...message("group-message"),
+    key: { id: "group-message", remoteJid: group, remoteJidAlt: chat, participant: chat },
+  });
+  assert.equal(listMessages(user, group).length, 1);
+  assert.equal(listMessages(user, chat).length, 0);
+});
+
 test("exclusão para todos respeita autoria e prazo de dois dias", () => {
   const now = 2_000_000_000_000;
   const twoDays = 2 * 24 * 60 * 60 * 1000;

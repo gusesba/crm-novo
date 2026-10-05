@@ -94,7 +94,8 @@ export function saveMessage(user: string, msg: WAMessage) {
   ).run(user, jid, name, text, timestamp);
 }
 export function messageChatId(message: WAMessage) {
-  return message.key.remoteJidAlt?.endsWith("@s.whatsapp.net")
+  return message.key.remoteJid?.endsWith("@lid") &&
+    message.key.remoteJidAlt?.endsWith("@s.whatsapp.net")
     ? message.key.remoteJidAlt
     : message.key.remoteJid;
 }

@@ -1,6 +1,6 @@
 # Documentação técnica dos fluxos do Via CRM
 
-Levantamento do código em **02/10/2026**. Este documento descreve a implementação encontrada no frontend Next.js, na API .NET e no serviço WhatsApp Node/Fastify/Baileys. O inventário foi construído a partir das rotas, componentes, handlers, serviços, persistência e testes; `FUNCIONALIDADES.md` não foi usado como fonte do inventário.
+Levantamento do código em **05/10/2026**. Este documento descreve a implementação encontrada no frontend Next.js, na API .NET e no serviço WhatsApp Node/Fastify/Baileys. O inventário foi construído a partir das rotas, componentes, handlers, serviços, persistência e testes; `FUNCIONALIDADES.md` não foi usado como fonte do inventário.
 
 “Todos os fluxos” significa os caminhos de negócio e as ramificações explícitas implementadas, incluindo sucesso, validação, autorização, cancelamento, falha parcial e processamento automático. Falhas genéricas compartilhadas estão na seção 3 e se aplicam às operações posteriores. Não é uma homologação de uma conta real do WhatsApp nem uma promessa de compatibilidade do protocolo externo.
 
@@ -677,7 +677,7 @@ Esses fluxos são originados por eventos Baileys, sem clique e sem POST do naveg
 
 ### 15.1 Caminhos dentro de saveMessage
 
-1. Descarta sem chat/id/conteúdo e `status@broadcast`; prefere remoteJidAlt individual ao remoteJid quando existe.
+1. Resolve o chat pelo `remoteJid` original; somente para conversas individuais `@lid` usa `remoteJidAlt` com `@s.whatsapp.net`. Status (`remoteJid='status@broadcast'`) são descartados mesmo com número alternativo do autor, antes de salvar mensagem, reação, nome de perfil ou prévia. Grupos mantêm o JID de grupo. Descarta também mensagens sem chat/id/conteúdo. Respostas a Status cujo chat original é uma conversa individual continuam sendo mensagens reais, mesmo com referência ao Status no contexto citado. Eventos ao vivo e sincronização de histórico usam a mesma regra, sem alteração de endpoints/payloads na API/frontend.
 2. Normaliza envelopes Baileys. ReactionMessage atualiza reação e termina; protocolMessage.editedMessage atualiza original do mesmo chat; REVOKE marca deleted; outros protocolos/distribuição de chave não geram balões.
 3. Classifica conteúdo, extrai texto/caption/nome de documento/card; tipo não suportado pode cair em “Mensagem não suportada”. Timestamp fica em milissegundos.
 4. Incoming individual salva pushName; incoming de grupo salva nome do remetente sem substituir título do grupo.
