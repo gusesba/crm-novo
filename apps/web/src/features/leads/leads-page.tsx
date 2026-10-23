@@ -34,6 +34,7 @@ export function LeadsPage({
   const [seller, setSeller] = useState("");
   const [branch, setBranch] = useState("");
   const [classification, setClassification] = useState("");
+  const [sort, setSort] = useState("created_desc");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const invalidDates = !!(startDate && endDate && startDate > endDate);
@@ -60,6 +61,7 @@ export function LeadsPage({
     pageSize: "10",
     mine: String(mode === "mine"),
     sales: String(mode === "sales"),
+    sort,
   });
   if (status) query.set("status", status);
   if (service) query.set("serviceId", service);
@@ -94,7 +96,7 @@ export function LeadsPage({
   }
   useEffect(() => {
     setSelected([]);
-  }, [page, debounced, status, service, seller, branch, classification, startDate, endDate]);
+  }, [page, debounced, status, service, seller, branch, classification, startDate, endDate, sort]);
   const deepLink = searchParams.get("lead");
   useEffect(() => {
     if (deepLink)
@@ -285,6 +287,11 @@ export function LeadsPage({
             selected={selected}
             setSelected={setSelected}
             setEditing={setEditing}
+            sort={sort}
+            onSort={(value) => {
+              setSort(value);
+              setPage(1);
+            }}
           />
         )}
         <div className="table-pagination">

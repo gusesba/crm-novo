@@ -11,7 +11,7 @@ namespace Crm.Api.Features.Leads;
 public class LeadsController(CrmDbContext db, CurrentUser current, LeadService service, WhatsAppClient whatsapp) : ControllerBase
 {
     [HttpGet]
-    public async Task<object> List(string? search, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId, DateTime? createdFrom, DateTime? createdTo, bool mine = false, bool sales = false, int page = 1, int pageSize = 20)
+    public async Task<object> List(string? search, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId, DateTime? createdFrom, DateTime? createdTo, string? sort, bool mine = false, bool sales = false, int page = 1, int pageSize = 20)
     {
         var query = Filter(search, status, serviceId, sellerId, branchId, classificationId, createdFrom, createdTo, mine, sales);
         var personalClassifications = from member in db.LeadClassifications.AsNoTracking()
@@ -19,7 +19,7 @@ public class LeadsController(CrmDbContext db, CurrentUser current, LeadService s
                                       where classification.UserId == current.Id
                                       select new { member.LeadId, classification.Id, classification.Name, classification.Color };
         pageSize = Math.Clamp(pageSize, 1, 100); page = Math.Max(page, 1);
-        var items = await query.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id)
+        var items = await LeadOrdering.Apply(query, sort)
             .Skip((page - 1) * pageSize).Take(pageSize)
             .Select(lead => new
             {
@@ -33,10 +33,10 @@ public class LeadsController(CrmDbContext db, CurrentUser current, LeadService s
         return new { items, total = await query.CountAsync(), page, pageSize };
     }
     [HttpGet("export")]
-    public async Task<IActionResult> Export(string? search, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId, DateTime? createdFrom, DateTime? createdTo, bool mine = false, bool sales = false, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> Export(string? search, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId, DateTime? createdFrom, DateTime? createdTo, string? sort, bool mine = false, bool sales = false, CancellationToken cancellationToken = default)
     {
         var query = Filter(search, status, serviceId, sellerId, branchId, classificationId, createdFrom, createdTo, mine, sales);
-        var data = await LeadExcelExport.Create(query, db, current.Id, sales, cancellationToken);
+        var data = await LeadExcelExport.Create(LeadOrdering.Apply(query, sort), db, current.Id, sales, cancellationToken);
         return File(data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", sales ? "vendas.xlsx" : "leads.xlsx");
     }
 

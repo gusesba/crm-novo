@@ -7,12 +7,12 @@ namespace Crm.Api.Features.Leads;
 
 public static class LeadExcelExport
 {
-    public static async Task<byte[]> Create(IQueryable<Lead> query, CrmDbContext db, int userId, bool sales, CancellationToken cancellationToken)
+    public static async Task<byte[]> Create(IOrderedQueryable<Lead> query, CrmDbContext db, int userId, bool sales, CancellationToken cancellationToken)
     {
         if (await query.CountAsync(cancellationToken) > 1_048_575)
             throw new BusinessException("O resultado excede o limite de linhas do Excel. Refine os filtros para exportar.");
 
-        var items = await query.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id)
+        var items = await query
             .Select(lead => new
             {
                 lead,

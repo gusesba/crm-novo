@@ -110,6 +110,21 @@ th {
   padding: 13px 18px;
   border-bottom: 1px solid var(--line);
 }
+.table-sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+}
+.table-sort-button:hover,
+th[aria-sort] .table-sort-button {
+  color: var(--green);
+}
 td {
   font-size: 11px;
   padding: 17px 18px;

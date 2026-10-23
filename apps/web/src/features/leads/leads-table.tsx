@@ -2,7 +2,7 @@
 import { Avatar, Badge } from "@/components/ui";
 import { date, money, phone } from "@/lib/format";
 import type { Catalog, Lead, User } from "@/lib/types";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ArrowUpRight } from "lucide-react";
 import Link from "next/link";
 import { LeadConversationButton } from "./lead-conversation-button";
 export function LeadsTable({
@@ -12,6 +12,8 @@ export function LeadsTable({
   selected,
   setSelected,
   setEditing,
+  sort,
+  onSort,
 }: {
   items: Lead[];
   user: User | null;
@@ -19,7 +21,28 @@ export function LeadsTable({
   selected: number[];
   setSelected: (ids: number[]) => void;
   setEditing: (lead: Lead) => void;
+  sort: string;
+  onSort: (sort: string) => void;
 }) {
+  function sortHeader(label: string, field: "name" | "value" | "created") {
+    const active = sort.startsWith(`${field}_`);
+    const ascending = sort === `${field}_asc`;
+    const nextDirection = active ? (ascending ? "desc" : "asc") : field === "name" ? "asc" : "desc";
+    const SortIcon = active ? (ascending ? ArrowUp : ArrowDown) : ArrowUpDown;
+    return (
+      <th scope="col" aria-sort={active ? (ascending ? "ascending" : "descending") : undefined}>
+        <button
+          type="button"
+          className="table-sort-button"
+          onClick={() => onSort(`${field}_${nextDirection}`)}
+          title={`Ordenar por ${label.toLowerCase()} em ordem ${nextDirection === "asc" ? "crescente" : "decrescente"}`}
+        >
+          {label}
+          <SortIcon size={12} aria-hidden="true" />
+        </button>
+      </th>
+    );
+  }
   return (
     <div className="table-scroll">
       <table>
@@ -37,13 +60,13 @@ export function LeadsTable({
                 />
               </th>
             )}
-            <th>CLIENTE</th>
+            {sortHeader("CLIENTE", "name")}
             <th>SERVIÇO / ORIGEM</th>
             <th>STATUS</th>
             <th>CLASSIFICAÇÕES</th>
             <th>VENDEDOR ATUAL</th>
-            <th>VALOR</th>
-            <th>ENTRADA</th>
+            {sortHeader("VALOR", "value")}
+            {sortHeader("ENTRADA", "created")}
             <th />
           </tr>
         </thead>
