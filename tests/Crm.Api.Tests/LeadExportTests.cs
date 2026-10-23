@@ -117,7 +117,7 @@ public class LeadExportTests
             using var workbook = await Export(camila, filters);
             Assert.Equal(list.GetProperty("items").EnumerateArray().Select(x => x.GetProperty("id").GetInt32()), Ids(workbook));
         }
-        using var combined = await Export(camila, prefix + "&mine=true&sales=true&serviceId=1&sellerId=2&branchId=1");
+        using var combined = await Export(camila, prefix + "&mine=true&sales=true&serviceId=1&sellerId=2&branchId=1&createdFrom=2000-01-01T00:00:00Z&createdTo=2100-01-01T00:00:00Z");
         Assert.Equal(new[] { leads[0].Id }, Ids(combined));
         Assert.Equal("Só Camila", combined.Worksheet("Vendas").Cell("S2").GetString());
         foreach (var client in new[] { admin, rafael })
@@ -153,12 +153,13 @@ public class LeadExportTests
         db.Leads.Add(outside);
         await db.SaveChangesAsync();
 
-        using var allowed = await Export(scoped);
+        const string dates = "createdFrom=2000-01-01T00:00:00Z&createdTo=2100-01-01T00:00:00Z";
+        using var allowed = await Export(scoped, dates);
         Assert.NotEmpty(Ids(allowed));
         Assert.DoesNotContain(outside.Id, Ids(allowed));
-        using var denied = await Export(scoped, $"branchId={branch.Id}&sellerId=1");
+        using var denied = await Export(scoped, $"{dates}&branchId={branch.Id}&sellerId=1");
         Assert.Empty(Ids(denied));
-        using var global = await Export(admin, $"branchId={branch.Id}");
+        using var global = await Export(admin, $"{dates}&branchId={branch.Id}");
         Assert.Equal(new[] { outside.Id }, Ids(global));
     }
 
@@ -177,5 +178,63 @@ public class LeadExportTests
         Assert.True(empty.Worksheet(1).AutoFilter.IsEnabled);
         using var response = await admin.GetAsync("/api/leads/export?sales=true&search=nenhum-registro-exportacao");
         Assert.Equal("vendas.xlsx", response.Content.Headers.ContentDisposition?.FileName?.Trim('"'));
+    }
+
+    [Theory]
+    [InlineData("createdFrom=2001-02-10T03:00:00Z&createdTo=2001-02-13T03:00:00Z", new[] { 2, 1 })]
+    [InlineData("createdFrom=2001-02-12T03:00:00Z&createdTo=2001-02-13T03:00:00Z", new[] { 2 })]
+    [InlineData("createdFrom=2001-02-10T03:00:00Z", new[] { 3, 2, 1 })]
+    [InlineData("createdTo=2001-02-13T03:00:00Z", new[] { 2, 1, 0 })]
+    [InlineData("createdFrom=2001-02-10T00:00:00-03:00&createdTo=2001-02-13T00:00:00-03:00", new[] { 2, 1 })]
+    [InlineData("createdFrom=2000-01-01T00:00:00Z&createdTo=2000-01-02T00:00:00Z", new int[] { })]
+    public async Task DatePeriodFiltersListAndExportBeforePaginationIncludingLocalBoundaryDays(string dates, int[] indexes)
+    {
+        using var factory = new ApiFactory();
+        using var admin = await factory.Login();
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CrmDbContext>();
+        var firstMidnight = new DateTime(2001, 2, 10, 3, 0, 0, DateTimeKind.Utc);
+        var nextMidnight = firstMidnight.AddDays(3);
+        var times = new[] { firstMidnight.AddTicks(-1), firstMidnight, nextMidnight.AddTicks(-1), nextMidnight };
+        var leads = times.Select((time, i) => new Lead
+        {
+            BranchId = 1, SellerId = 2, CurrentSellerId = 2, Name = $"Período exportação {i}",
+            Phone = $"555198886000{i}", CreatedAt = time, UpdatedAt = new DateTime(2026, 10, 23),
+            Status = LeadStatuses.Won, Value = 100
+        }).ToArray();
+        db.Leads.AddRange(leads);
+        await db.SaveChangesAsync();
+        var filters = $"search={Uri.EscapeDataString("Período exportação")}&{dates}";
+        var expected = indexes.Select(i => leads[i].Id).ToArray();
+        foreach (var mode in new[] { "", "&sales=true" })
+        {
+            var result = await admin.GetFromJsonAsync<JsonElement>($"/api/leads?{filters}{mode}&pageSize=1");
+            Assert.Equal(expected.Length, result.GetProperty("total").GetInt32());
+            Assert.Equal(expected.Take(1), result.GetProperty("items").EnumerateArray().Select(x => x.GetProperty("id").GetInt32()));
+            using var workbook = await Export(admin, filters + mode + "&page=99&pageSize=1");
+            Assert.Equal(expected, Ids(workbook));
+        }
+        using var camila = await factory.Login("camila");
+        var mine = await camila.GetFromJsonAsync<JsonElement>($"/api/leads?{filters}&mine=true&pageSize=100");
+        Assert.Equal(expected, mine.GetProperty("items").EnumerateArray().Select(x => x.GetProperty("id").GetInt32()));
+        using var mineExport = await Export(camila, filters + "&mine=true");
+        Assert.Equal(expected, Ids(mineExport));
+    }
+
+    [Theory]
+    [InlineData("createdFrom=2001-02-13T03:00:00Z&createdTo=2001-02-10T03:00:00Z")]
+    [InlineData("createdFrom=invalid")]
+    [InlineData("createdTo=2001-02-30")]
+    public async Task InvalidDatePeriodIsRejectedByListAndExport(string dates)
+    {
+        using var factory = new ApiFactory();
+        using var admin = await factory.Login();
+        foreach (var endpoint in new[] { "/api/leads", "/api/leads/export" })
+        {
+            using var response = await admin.GetAsync($"{endpoint}?{dates}");
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+            if (dates.StartsWith("createdFrom=2001"))
+                Assert.Contains("A data inicial deve ser anterior ou igual à data final.", await response.Content.ReadAsStringAsync());
+        }
     }
 }

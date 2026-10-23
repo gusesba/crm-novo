@@ -12,14 +12,17 @@ namespace Crm.Api.Features.Appointments;
 public class AppointmentsController(CrmDbContext db, CurrentUser current, LeadService leads) : ControllerBase
 {
     [HttpGet]
-    public async Task<object> List(int? leadId, int? branchId, bool mine = false, bool includeCompleted = false, int page = 1, int pageSize = 20)
+    public async Task<object> List(int? leadId, int? branchId, DateTime? dueFrom, DateTime? dueTo, bool mine = false, bool includeCompleted = false, int page = 1, int pageSize = 20)
     {
+        if (dueFrom > dueTo) throw new BusinessException("A data inicial deve ser anterior ou igual à data final.");
         var query = from a in db.Appointments.AsNoTracking()
                     join l in current.Scope(db.Leads) on a.LeadId equals l.Id
                     where (!leadId.HasValue || l.Id == leadId) && (!branchId.HasValue || l.BranchId == branchId)
                         && (!mine || l.CurrentSellerId == current.Id)
                         && (includeCompleted || !a.Completed)
                     select new { a.Id, a.LeadId, a.DueAt, a.Note, a.Completed, leadName = l.Name, l.Phone, l.CurrentSellerId, l.BranchId };
+        if (dueFrom.HasValue) query = query.Where(x => x.DueAt >= dueFrom.Value);
+        if (dueTo.HasValue) query = query.Where(x => x.DueAt < dueTo.Value);
         pageSize = Math.Clamp(pageSize, 1, 100); page = Math.Max(page, 1);
         return new
         {

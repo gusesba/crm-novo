@@ -27,13 +27,28 @@ export function AppointmentsPage() {
   const leadId = params.get("lead");
   const [mine, setMine] = useState(false);
   const [completed, setCompleted] = useState(false);
+  const [selectedDate, setSelectedDate] = useState("");
   const [page, setPage] = useState(1);
   const [create, setCreate] = useState(false);
   const [edit, setEdit] = useState<Appointment>();
   const [error, setError] = useState("");
   const selectedLead = useResource<Lead>(leadId ? `/leads/${leadId}` : null);
+  const query = new URLSearchParams({
+    mine: String(mine),
+    includeCompleted: String(completed),
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+  if (leadId) query.set("leadId", leadId);
+  if (selectedDate) {
+    const start = new Date(`${selectedDate}T00:00:00`);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    query.set("dueFrom", start.toISOString());
+    query.set("dueTo", end.toISOString());
+  }
   const result = useResource<PageResult<Appointment>>(
-    `/appointments?mine=${mine}&includeCompleted=${completed}&page=${page}&pageSize=${pageSize}${leadId ? `&leadId=${leadId}` : ""}`,
+    `/appointments?${query}`,
   );
   useEffect(() => setPage(1), [leadId]);
   useEffect(() => {
@@ -86,6 +101,31 @@ export function AppointmentsPage() {
             Minha agenda
           </button>
         </div>
+        <div className="filter-row">
+          <label className="dashboard-date-filter">
+            <span>Dia</span>
+            <input
+              type="date"
+              aria-label="Filtrar agendamentos por dia"
+              value={selectedDate}
+              onChange={(e) => {
+                setSelectedDate(e.target.value);
+                setPage(1);
+              }}
+            />
+          </label>
+          {selectedDate && (
+            <button
+              className="text-button"
+              onClick={() => {
+                setSelectedDate("");
+                setPage(1);
+              }}
+            >
+              Limpar data
+            </button>
+          )}
+        </div>
         <label className="person-cell muted">
           <input
             type="checkbox"
@@ -124,8 +164,8 @@ export function AppointmentsPage() {
           <Loading />
         ) : !result.data?.items.length ? (
           <Empty
-            title="Espaço para o próximo contato"
-            description="Agende um retorno para continuar uma boa conversa."
+            title={selectedDate ? "Nenhum retorno neste dia" : "Espaço para o próximo contato"}
+            description={selectedDate ? "Escolha outro dia ou limpe a data para ver os demais retornos." : "Agende um retorno para continuar uma boa conversa."}
           />
         ) : (
           <div className="appointment-list">
