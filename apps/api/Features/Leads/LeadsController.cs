@@ -11,9 +11,9 @@ namespace Crm.Api.Features.Leads;
 public class LeadsController(CrmDbContext db, CurrentUser current, LeadService service, WhatsAppClient whatsapp) : ControllerBase
 {
     [HttpGet]
-    public async Task<object> List(string? search, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId, bool mine = false, bool sales = false, int page = 1, int pageSize = 20)
+    public async Task<object> List(string? search, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId, DateTime? createdFrom, DateTime? createdTo, bool mine = false, bool sales = false, int page = 1, int pageSize = 20)
     {
-        var query = Filter(search, status, serviceId, sellerId, branchId, classificationId, mine, sales);
+        var query = Filter(search, status, serviceId, sellerId, branchId, classificationId, createdFrom, createdTo, mine, sales);
         var personalClassifications = from member in db.LeadClassifications.AsNoTracking()
                                       join classification in db.Classifications.AsNoTracking() on member.ClassificationId equals classification.Id
                                       where classification.UserId == current.Id
@@ -33,16 +33,19 @@ public class LeadsController(CrmDbContext db, CurrentUser current, LeadService s
         return new { items, total = await query.CountAsync(), page, pageSize };
     }
     [HttpGet("export")]
-    public async Task<IActionResult> Export(string? search, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId, bool mine = false, bool sales = false, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> Export(string? search, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId, DateTime? createdFrom, DateTime? createdTo, bool mine = false, bool sales = false, CancellationToken cancellationToken = default)
     {
-        var query = Filter(search, status, serviceId, sellerId, branchId, classificationId, mine, sales);
+        var query = Filter(search, status, serviceId, sellerId, branchId, classificationId, createdFrom, createdTo, mine, sales);
         var data = await LeadExcelExport.Create(query, db, current.Id, sales, cancellationToken);
         return File(data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", sales ? "vendas.xlsx" : "leads.xlsx");
     }
 
-    private IQueryable<Lead> Filter(string? search, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId, bool mine, bool sales)
+    private IQueryable<Lead> Filter(string? search, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId, DateTime? createdFrom, DateTime? createdTo, bool mine, bool sales)
     {
+        if (createdFrom > createdTo) throw new BusinessException("A data inicial deve ser anterior ou igual à data final.");
         var query = current.Scope(db.Leads.AsNoTracking());
+        if (createdFrom.HasValue) query = query.Where(x => x.CreatedAt >= createdFrom.Value);
+        if (createdTo.HasValue) query = query.Where(x => x.CreatedAt < createdTo.Value);
         if (!string.IsNullOrWhiteSpace(search))
         {
             var term = search.ToLowerInvariant();

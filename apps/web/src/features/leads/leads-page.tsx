@@ -34,6 +34,9 @@ export function LeadsPage({
   const [seller, setSeller] = useState("");
   const [branch, setBranch] = useState("");
   const [classification, setClassification] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const invalidDates = !!(startDate && endDate && startDate > endDate);
   const classifications = useResource<LeadClassification[]>("/classifications");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<number[]>([]);
@@ -63,9 +66,16 @@ export function LeadsPage({
   if (seller) query.set("sellerId", seller);
   if (branch) query.set("branchId", branch);
   if (classification) query.set("classificationId", classification);
-  const result = useResource<PageResult<Lead>>(`/leads?${query}`);
+  if (startDate)
+    query.set("createdFrom", new Date(`${startDate}T00:00:00`).toISOString());
+  if (endDate) {
+    const until = new Date(`${endDate}T00:00:00`);
+    until.setDate(until.getDate() + 1);
+    query.set("createdTo", until.toISOString());
+  }
+  const result = useResource<PageResult<Lead>>(invalidDates ? null : `/leads?${query}`);
   async function exportExcel() {
-    if (exportRequest.current) return;
+    if (exportRequest.current || invalidDates) return;
     const controller = new AbortController();
     exportRequest.current = controller;
     setExporting(true);
@@ -84,7 +94,7 @@ export function LeadsPage({
   }
   useEffect(() => {
     setSelected([]);
-  }, [page, debounced, status, service, seller, branch, classification]);
+  }, [page, debounced, status, service, seller, branch, classification, startDate, endDate]);
   const deepLink = searchParams.get("lead");
   useEffect(() => {
     if (deepLink)
@@ -105,13 +115,13 @@ export function LeadsPage({
                   ? "Matrículas realizadas"
                   : "Carteira de leads"}
             </h2>
-            <span className="count-pill">{result.data?.total || 0}</span>
+            <span className="count-pill">{invalidDates ? 0 : result.data?.total || 0}</span>
           </div>
           <div className="heading-actions">
             <button
               className="button secondary compact"
               onClick={() => void exportExcel()}
-              disabled={exporting || result.loading || !!result.error || !result.data?.total || search !== debounced}
+              disabled={exporting || invalidDates || result.loading || !!result.error || !result.data?.total || search !== debounced}
               title="Exportar todos os registros com os filtros atuais"
               aria-busy={exporting}
             >
@@ -145,6 +155,32 @@ export function LeadsPage({
           </div>
           <div className="filter-row">
             <Filter size={16} />
+            <label className="leads-date-filter" title="Data de cadastro no horário local">
+              <span>Cadastro de</span>
+              <input
+                type="date"
+                aria-label="Data inicial"
+                value={startDate}
+                max={endDate || undefined}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </label>
+            <label className="leads-date-filter" title="Data de cadastro no horário local">
+              <span>Até</span>
+              <input
+                type="date"
+                aria-label="Data final"
+                value={endDate}
+                min={startDate || undefined}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </label>
             <select
               aria-label="Filtrar classificação"
               value={classification}
@@ -233,7 +269,11 @@ export function LeadsPage({
         {(error || result.error) && (
           <ErrorBox message={error || result.error} retry={result.reload} />
         )}
-        {result.loading ? (
+        {invalidDates ? (
+          <p className="form-note" role="alert">
+            A data inicial deve ser anterior ou igual à data final.
+          </p>
+        ) : result.loading ? (
           <Loading />
         ) : !result.data?.items.length ? (
           <Empty />
@@ -249,14 +289,14 @@ export function LeadsPage({
         )}
         <div className="table-pagination">
           <span>
-            {result.data?.total
+            {!invalidDates && result.data?.total
               ? `${(page - 1) * 10 + 1}–${Math.min(page * 10, result.data.total)} de ${result.data.total} registros`
               : "0 registros"}
           </span>
           <div>
             <button
               className="icon-button"
-              disabled={page === 1}
+              disabled={invalidDates || page === 1}
               onClick={() => setPage(page - 1)}
               aria-label="Página anterior"
             >
@@ -265,7 +305,7 @@ export function LeadsPage({
             <span className="page-number">{page}</span>
             <button
               className="icon-button"
-              disabled={!result.data || page * 10 >= result.data.total}
+              disabled={invalidDates || !result.data || page * 10 >= result.data.total}
               onClick={() => setPage(page + 1)}
               aria-label="Próxima página"
             >
