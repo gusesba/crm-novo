@@ -1,4 +1,8 @@
 import { z } from "zod";
+export const archiveChatSchema = z.object({
+  chatId: z.string().max(100).regex(/^[^@\s]+@(s\.whatsapp\.net|g\.us|lid)$/),
+  archived: z.boolean(),
+});
 export const attachmentSchema = z.object({
   name: z.string().min(1).max(200),
   mime: z.string().max(120),

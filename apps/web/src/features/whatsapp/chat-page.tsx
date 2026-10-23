@@ -4,10 +4,10 @@ import { Avatar, Badge, Empty, ErrorBox, Loading, Modal } from "@/components/ui"
 import { LeadForm } from "@/features/leads/lead-form";
 import { Classifications } from "@/features/leads/classifications";
 import { useResource } from "@/hooks/use-resource";
-import { post } from "@/lib/api";
+import { post, put } from "@/lib/api";
 import { chatViews, type ChatView } from "@/lib/chat-groups";
 import type { Chat, Lead, PageResult, SharedContact } from "@/lib/types";
-import { Link2, Plus, Search } from "lucide-react";
+import { Archive, ArchiveRestore, Link2, Plus, Search } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Connection } from "./connection";
@@ -26,6 +26,7 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
   const [create, setCreate] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead>();
   const [error, setError] = useState("");
+  const [archiving, setArchiving] = useState(false);
   const [phoneVariant, setPhoneVariant] = useState<{ original: string; phone: string; chat: Chat }>();
   const suffix = backup && historyUser ? `?userId=${historyUser}` : "";
   const pictureUrl = (chatId: string) =>
@@ -106,6 +107,20 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
       notify("Conversa vinculada ao lead.");
     } catch (e) {
       setError((e as Error).message);
+    }
+  }
+  async function toggleArchived() {
+    if (!selectedChat || archiving || chats.loading) return;
+    setArchiving(true);
+    setError("");
+    try {
+      await put("/whatsapp/chats/archive", { chatId: selectedChat.id, archived: !selectedChat.archived });
+      chats.reload();
+      notify(selectedChat.archived ? "Conversa desarquivada." : "Conversa arquivada.");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setArchiving(false);
     }
   }
   return (
@@ -235,6 +250,17 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
                   {linkedLead ? "· Vinculado ao CRM" : ""}
                 </p>
               </div>
+              {!backup && selectedChat && (
+                <button
+                  type="button"
+                  className="button secondary compact"
+                  disabled={archiving || chats.loading}
+                  onClick={() => void toggleArchived()}
+                >
+                  {selectedChat.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}
+                  {archiving ? "Salvando…" : selectedChat.archived ? "Desarquivar" : "Arquivar"}
+                </button>
+              )}
               {!backup && classificationLeadId && <Classifications key={classificationLeadId} leadId={classificationLeadId} onSaved={chats.reload} />}
               {!backup &&
                 chat.id.endsWith("@s.whatsapp.net") &&
