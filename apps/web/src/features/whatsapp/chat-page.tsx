@@ -1,6 +1,6 @@
 "use client";
 import { useApp } from "@/components/providers";
-import { Avatar, Badge, Empty, ErrorBox, Loading, Modal, PageHeader } from "@/components/ui";
+import { Avatar, Badge, Empty, ErrorBox, Loading, Modal } from "@/components/ui";
 import { LeadForm } from "@/features/leads/lead-form";
 import { Classifications } from "@/features/leads/classifications";
 import { useResource } from "@/hooks/use-resource";
@@ -110,43 +110,6 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
   }
   return (
     <>
-      <PageHeader
-        eyebrow={
-          backup ? "CONTEXTO QUE PERMANECE" : "PROXIMIDADE EM CADA MENSAGEM"
-        }
-        title={
-          backup
-            ? "O histórico da sua relação."
-            : "Sua melhor conexão com o cliente."
-        }
-        description={
-          backup
-            ? "Consulte as mensagens persistidas no CRM, por sessão de atendimento."
-            : "Converse, reconheça oportunidades e mantenha tudo conectado à sua carteira."
-        }
-        actions={
-          backup &&
-          user?.isAdmin && (
-            <select
-              aria-label="Usuário do histórico"
-              value={historyUser}
-              onChange={(e) => {
-                setHistoryUser(e.target.value);
-                setChat(undefined);
-              }}
-            >
-              <option value="">Meu histórico</option>
-              {catalog?.users
-                .filter((u) => u.id !== user.id)
-                .map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-            </select>
-          )
-        }
-      />
       {!backup && <Connection />}
       {(error || chats.error) && (
         <ErrorBox message={error || chats.error} retry={chats.reload} />
@@ -154,6 +117,26 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
       <section className="panel chat-layout">
         <aside className="chat-sidebar">
           <div className="chat-search">
+            {backup && user?.isAdmin && (
+              <select
+                className="history-user-select"
+                aria-label="Usuário do histórico"
+                value={historyUser}
+                onChange={(e) => {
+                  setHistoryUser(e.target.value);
+                  setChat(undefined);
+                }}
+              >
+                <option value="">Meu histórico</option>
+                {catalog?.users
+                  .filter((u) => u.id !== user.id)
+                  .map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+              </select>
+            )}
             <div className="search-field">
               <Search size={16} />
               <input

@@ -6,6 +6,9 @@
   gap: 12px;
   flex-wrap: wrap;
 }
+.overview-toolbar > .tabs {
+  margin-bottom: 0;
+}
 .dashboard-date-filter {
   display: flex;
   align-items: center;

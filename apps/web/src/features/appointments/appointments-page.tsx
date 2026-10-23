@@ -1,12 +1,11 @@
 "use client";
 import { useApp } from "@/components/providers";
-import { Empty, ErrorBox, Loading, PageHeader } from "@/components/ui";
+import { Empty, ErrorBox, Loading } from "@/components/ui";
 import { useResource } from "@/hooks/use-resource";
 import { api, put } from "@/lib/api";
 import { date, time } from "@/lib/format";
 import type { Appointment, Lead, PageResult } from "@/lib/types";
 import {
-  CalendarDays,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -66,17 +65,6 @@ export function AppointmentsPage() {
   }
   return (
     <>
-      <PageHeader
-        eyebrow="CADA CONTATO NO TEMPO CERTO"
-        title="Seu próximo passo, organizado."
-        description="Retornos comerciais para manter as oportunidades em movimento."
-        actions={
-          <button className="button primary" onClick={() => setCreate(true)}>
-            <Plus size={17} />
-            Agendar retorno
-          </button>
-        }
-      />
       <div className="overview-toolbar">
         <div className="tabs">
           <button
@@ -127,7 +115,10 @@ export function AppointmentsPage() {
             <h2>Agenda de relacionamento</h2>
             <p>{result.data?.total || 0} retornos encontrados</p>
           </div>
-          <CalendarDays size={20} />
+          <button className="button primary" onClick={() => setCreate(true)}>
+            <Plus size={17} />
+            Agendar retorno
+          </button>
         </div>
         {result.loading ? (
           <Loading />

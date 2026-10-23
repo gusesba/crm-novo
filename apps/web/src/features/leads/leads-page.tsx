@@ -1,6 +1,6 @@
 "use client";
 import { useApp } from "@/components/providers";
-import { Empty, ErrorBox, Loading, PageHeader } from "@/components/ui";
+import { Empty, ErrorBox, Loading } from "@/components/ui";
 import { useResource } from "@/hooks/use-resource";
 import { api } from "@/lib/api";
 import { statuses } from "@/lib/format";
@@ -70,31 +70,8 @@ export function LeadsPage({
         .then(setEditing)
         .catch((e) => setError(e.message));
   }, [deepLink]);
-  const title =
-    mode === "mine"
-      ? "Sua próxima conquista está aqui."
-      : mode === "sales"
-        ? "Conversas que viraram conquistas."
-        : "Cada lead, uma nova possibilidade.";
   return (
     <>
-      <PageHeader
-        eyebrow={
-          mode === "sales" ? "VENDAS EFETIVADAS" : "RELACIONAMENTO COM DIREÇÃO"
-        }
-        title={title}
-        description={
-          mode === "sales"
-            ? "Acompanhe as matrículas e os resultados da sua operação."
-            : "Organize sua carteira, acompanhe negociações e mantenha o próximo passo à vista."
-        }
-        actions={
-          <button className="button primary" onClick={() => setCreate(true)}>
-            <Plus size={17} />
-            Novo lead
-          </button>
-        }
-      />
       <section className="panel leads-panel">
         <div className="table-title">
           <div>
@@ -108,15 +85,21 @@ export function LeadsPage({
             </h2>
             <span className="count-pill">{result.data?.total || 0}</span>
           </div>
-          {selected.length > 0 && user?.isAdmin && (
-            <button
-              className="button secondary compact"
-              onClick={() => setTransfer(true)}
-            >
-              <ArrowLeftRight size={15} />
-              Transferir {selected.length}
+          <div className="heading-actions">
+            {selected.length > 0 && user?.isAdmin && (
+              <button
+                className="button secondary compact"
+                onClick={() => setTransfer(true)}
+              >
+                <ArrowLeftRight size={15} />
+                Transferir {selected.length}
+              </button>
+            )}
+            <button className="button primary" onClick={() => setCreate(true)}>
+              <Plus size={17} />
+              Novo lead
             </button>
-          )}
+          </div>
         </div>
         <div className="table-toolbar">
           <div className="search-field">

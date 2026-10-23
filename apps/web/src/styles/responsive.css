@@ -20,11 +20,6 @@
   h1 {
     font-size: 24px;
   }
-  .page-heading {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 17px;
-  }
   .heading-actions {
     width: 100%;
   }
@@ -61,9 +56,6 @@
   }
   .error-box {
     flex-wrap: wrap;
-  }
-  .page-heading p {
-    line-height: 1.7;
   }
   .table-title {
     padding: 17px;

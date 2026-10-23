@@ -1,6 +1,6 @@
 "use client";
 import { useApp } from "@/components/providers";
-import { Empty, ErrorBox, Loading, PageHeader } from "@/components/ui";
+import { Empty, ErrorBox, Loading } from "@/components/ui";
 import { useResource } from "@/hooks/use-resource";
 import { api } from "@/lib/api";
 import type { LeadGroup } from "@/lib/types";
@@ -30,17 +30,12 @@ export function GroupsPage() {
   }
   return (
     <>
-      <PageHeader
-        eyebrow="CONVERSAS COM ALGO EM COMUM"
-        title="Públicos certos. Mais proximidade."
-        description="Organize leads da sua carteira em grupos internos para facilitar os disparos."
-        actions={
-          <button className="button primary" onClick={() => setCreate(true)}>
-            <Plus size={17} />
-            Criar grupo
-          </button>
-        }
-      />
+      <div className="page-toolbar">
+        <button className="button primary" onClick={() => setCreate(true)}>
+          <Plus size={17} />
+          Criar grupo
+        </button>
+      </div>
       {(error || result.error) && (
         <ErrorBox message={error || result.error} retry={result.reload} />
       )}{" "}

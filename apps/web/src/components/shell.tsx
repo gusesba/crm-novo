@@ -158,7 +158,7 @@ export function Shell({ children }: { children: ReactNode }) {
             </button>
             <span>Workspace</span>
             <ChevronRight size={14} />
-            <strong>{active?.label || "Início"}</strong>
+            <h1>{active?.label || "Início"}</h1>
           </div>
           <div className="topbar-actions">
             <span className="branch-label">

@@ -45,6 +45,7 @@
 }
 .table-title {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -58,6 +59,9 @@
 }
 .table-title svg {
   color: #7b9385;
+}
+.table-title .button svg {
+  color: currentColor;
 }
 .count-pill {
   font-size: 10px;

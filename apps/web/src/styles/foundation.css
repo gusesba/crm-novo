@@ -200,21 +200,17 @@ p {
 .text-button:hover {
   text-decoration: underline;
 }
-.page-heading {
+.page-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 22px;
-  margin-bottom: 26px;
-}
-.page-heading p {
-  font-size: 12px;
-  margin-top: 9px;
+  justify-content: flex-end;
+  margin-bottom: 18px;
 }
 .heading-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 .panel {
   background: white;

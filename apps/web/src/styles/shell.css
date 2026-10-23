@@ -253,7 +253,8 @@
 .breadcrumb > svg {
   color: #b6c1b9;
 }
-.breadcrumb strong {
+.breadcrumb h1 {
+  font-size: inherit;
   font-weight: 500;
   color: #788b7e;
 }

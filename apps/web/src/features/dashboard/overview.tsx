@@ -1,6 +1,6 @@
 "use client";
 import { useApp } from "@/components/providers";
-import { ErrorBox, Loading, PageHeader } from "@/components/ui";
+import { ErrorBox, Loading } from "@/components/ui";
 import { LeadForm } from "@/features/leads/lead-form";
 import { useResource } from "@/hooks/use-resource";
 import type { Appointment, DashboardData, PageResult } from "@/lib/types";
@@ -52,22 +52,6 @@ export function Overview() {
   const d = result.data;
   return (
     <>
-      <PageHeader
-        eyebrow="SEU NEGÓCIO EM MOVIMENTO"
-        title={`Um bom dia começa por aqui${user.name !== "Administrador" ? `, ${user.name.split(" ")[0]}` : ""}.`}
-        description="Uma visão clara dos seus resultados e das próximas oportunidades."
-        actions={
-          <>
-            <button
-              className="button secondary"
-              onClick={() => setCreate(true)}
-            >
-              <Plus size={17} />
-              Novo lead
-            </button>
-          </>
-        }
-      />
       <div className="overview-toolbar">
         <div className="live-label">
           <span className="online-dot" /> Visão geral da operação
@@ -136,6 +120,13 @@ export function Overview() {
               </label>
             </>
           )}
+          <button
+            className="button secondary"
+            onClick={() => setCreate(true)}
+          >
+            <Plus size={17} />
+            Novo lead
+          </button>
         </div>
       </div>
       {periodError ? (

@@ -6,7 +6,6 @@ import {
   Field,
   Loading,
   Modal,
-  PageHeader,
 } from "@/components/ui";
 import { useResource } from "@/hooks/use-resource";
 import { post } from "@/lib/api";
@@ -147,11 +146,6 @@ export function CampaignsPage() {
   }
   return (
     <>
-      <PageHeader
-        eyebrow="ALCANCE COM INTENÇÃO"
-        title="Uma sequência. Novas possibilidades."
-        description="Prepare mensagens em etapas para os leads selecionados e acompanhe cada envio."
-      />
       <Connection />
       <div className="campaign-grid">
         <section className="panel">

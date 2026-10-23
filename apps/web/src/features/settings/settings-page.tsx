@@ -1,6 +1,6 @@
 "use client";
 import { useApp } from "@/components/providers";
-import { Avatar, Empty, PageHeader } from "@/components/ui";
+import { Avatar, Empty } from "@/components/ui";
 import type { Named, User } from "@/lib/types";
 import { Building2, Pencil, Plus, Settings2 } from "lucide-react";
 import { useState } from "react";
@@ -25,36 +25,30 @@ export function SettingsPage() {
   const canManage = !user.branchId || tab === "users" || tab === "branches";
   return (
     <>
-      <PageHeader
-        eyebrow="UMA OPERAÇÃO BEM ESTRUTURADA"
-        title="Tudo no seu devido lugar."
-        description="Gerencie sua equipe, unidades e os cadastros que apoiam cada atendimento."
-        actions={
-          canManage &&
-          !(user.branchId && tab === "branches") && (
+      <div className="overview-toolbar">
+        <div className="tabs">
+          {(Object.keys(titles) as Tab[]).map((t) => (
             <button
-              className="button primary"
-              onClick={() => {
-                setEditing(undefined);
-                setOpen(true);
-              }}
+              key={t}
+              className={t === tab ? "active" : ""}
+              onClick={() => setTab(t)}
             >
-              <Plus size={17} />
-              Adicionar cadastro
+              {titles[t]}
             </button>
-          )
-        }
-      />
-      <div className="tabs">
-        {(Object.keys(titles) as Tab[]).map((t) => (
+          ))}
+        </div>
+        {canManage && !(user.branchId && tab === "branches") && (
           <button
-            key={t}
-            className={t === tab ? "active" : ""}
-            onClick={() => setTab(t)}
+            className="button primary"
+            onClick={() => {
+              setEditing(undefined);
+              setOpen(true);
+            }}
           >
-            {titles[t]}
+            <Plus size={17} />
+            Adicionar cadastro
           </button>
-        ))}
+        )}
       </div>
       {!canManage && (
         <p className="form-note">
