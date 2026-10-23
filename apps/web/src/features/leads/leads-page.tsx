@@ -2,20 +2,21 @@
 import { useApp } from "@/components/providers";
 import { Empty, ErrorBox, Loading } from "@/components/ui";
 import { useResource } from "@/hooks/use-resource";
-import { api } from "@/lib/api";
+import { api, downloadFile } from "@/lib/api";
 import { statuses } from "@/lib/format";
 import type { Lead, LeadClassification, PageResult } from "@/lib/types";
 import {
   ArrowLeftRight,
   ChevronLeft,
   ChevronRight,
+  Download,
   Filter,
   Plus,
   Search,
   UsersRound,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LeadForm } from "./lead-form";
 import { LeadsTable } from "./leads-table";
 import { TransferModal } from "./transfer-modal";
@@ -24,7 +25,7 @@ export function LeadsPage({
 }: {
   mode?: "all" | "mine" | "sales";
 }) {
-  const { user, catalog } = useApp();
+  const { user, catalog, notify } = useApp();
   const searchParams = useSearchParams();
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -40,6 +41,9 @@ export function LeadsPage({
   const [create, setCreate] = useState(false);
   const [transfer, setTransfer] = useState(false);
   const [error, setError] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const exportRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => exportRequest.current?.abort(), []);
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebounced(search);
@@ -60,6 +64,24 @@ export function LeadsPage({
   if (branch) query.set("branchId", branch);
   if (classification) query.set("classificationId", classification);
   const result = useResource<PageResult<Lead>>(`/leads?${query}`);
+  async function exportExcel() {
+    if (exportRequest.current) return;
+    const controller = new AbortController();
+    exportRequest.current = controller;
+    setExporting(true);
+    const filters = new URLSearchParams(query);
+    filters.delete("page");
+    filters.delete("pageSize");
+    try {
+      await downloadFile(`/leads/export?${filters}`, mode === "sales" ? "vendas.xlsx" : "leads.xlsx", controller.signal);
+    } catch (e) {
+      if (!controller.signal.aborted)
+        notify(e instanceof Error ? e.message : "Não foi possível exportar os registros.", "error");
+    } finally {
+      exportRequest.current = null;
+      setExporting(false);
+    }
+  }
   useEffect(() => {
     setSelected([]);
   }, [page, debounced, status, service, seller, branch, classification]);
@@ -86,6 +108,16 @@ export function LeadsPage({
             <span className="count-pill">{result.data?.total || 0}</span>
           </div>
           <div className="heading-actions">
+            <button
+              className="button secondary compact"
+              onClick={() => void exportExcel()}
+              disabled={exporting || result.loading || !!result.error || !result.data?.total || search !== debounced}
+              title="Exportar todos os registros com os filtros atuais"
+              aria-busy={exporting}
+            >
+              <Download size={15} />
+              {exporting ? "Exportando…" : "Exportar Excel"}
+            </button>
             {selected.length > 0 && user?.isAdmin && (
               <button
                 className="button secondary compact"

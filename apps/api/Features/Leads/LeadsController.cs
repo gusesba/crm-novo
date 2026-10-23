@@ -13,24 +13,11 @@ public class LeadsController(CrmDbContext db, CurrentUser current, LeadService s
     [HttpGet]
     public async Task<object> List(string? search, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId, bool mine = false, bool sales = false, int page = 1, int pageSize = 20)
     {
-        var query = current.Scope(db.Leads.AsNoTracking());
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var term = search.ToLowerInvariant();
-            query = query.Where(x => x.Name.ToLower().Contains(term) || x.Phone.Contains(term));
-        }
-        if (status != null) query = query.Where(x => x.Status == status);
-        if (sales) query = query.Where(x => x.Status == LeadStatuses.Won);
-        if (mine) query = query.Where(x => x.CurrentSellerId == current.Id);
-        if (serviceId.HasValue) query = query.Where(x => x.ServiceId == serviceId);
-        if (sellerId.HasValue) query = query.Where(x => x.CurrentSellerId == sellerId);
-        if (branchId.HasValue) query = query.Where(x => x.BranchId == branchId);
+        var query = Filter(search, status, serviceId, sellerId, branchId, classificationId, mine, sales);
         var personalClassifications = from member in db.LeadClassifications.AsNoTracking()
                                       join classification in db.Classifications.AsNoTracking() on member.ClassificationId equals classification.Id
                                       where classification.UserId == current.Id
                                       select new { member.LeadId, classification.Id, classification.Name, classification.Color };
-        if (classificationId.HasValue)
-            query = query.Where(x => personalClassifications.Any(c => c.LeadId == x.Id && c.Id == classificationId));
         pageSize = Math.Clamp(pageSize, 1, 100); page = Math.Max(page, 1);
         var items = await query.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id)
             .Skip((page - 1) * pageSize).Take(pageSize)
@@ -44,6 +31,33 @@ public class LeadsController(CrmDbContext db, CurrentUser current, LeadService s
                     .Select(c => new { c.Id, c.Name, c.Color }).ToArray()
             }).ToListAsync();
         return new { items, total = await query.CountAsync(), page, pageSize };
+    }
+    [HttpGet("export")]
+    public async Task<IActionResult> Export(string? search, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId, bool mine = false, bool sales = false, CancellationToken cancellationToken = default)
+    {
+        var query = Filter(search, status, serviceId, sellerId, branchId, classificationId, mine, sales);
+        var data = await LeadExcelExport.Create(query, db, current.Id, sales, cancellationToken);
+        return File(data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", sales ? "vendas.xlsx" : "leads.xlsx");
+    }
+
+    private IQueryable<Lead> Filter(string? search, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId, bool mine, bool sales)
+    {
+        var query = current.Scope(db.Leads.AsNoTracking());
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.ToLowerInvariant();
+            query = query.Where(x => x.Name.ToLower().Contains(term) || x.Phone.Contains(term));
+        }
+        if (status != null) query = query.Where(x => x.Status == status);
+        if (sales) query = query.Where(x => x.Status == LeadStatuses.Won);
+        if (mine) query = query.Where(x => x.CurrentSellerId == current.Id);
+        if (serviceId.HasValue) query = query.Where(x => x.ServiceId == serviceId);
+        if (sellerId.HasValue) query = query.Where(x => x.CurrentSellerId == sellerId);
+        if (branchId.HasValue) query = query.Where(x => x.BranchId == branchId);
+        if (classificationId.HasValue)
+            query = query.Where(x => db.LeadClassifications.Any(member => member.LeadId == x.Id && member.ClassificationId == classificationId
+                && db.Classifications.Any(c => c.Id == member.ClassificationId && c.UserId == current.Id)));
+        return query;
     }
     [HttpGet("{id:int}")] public Task<Lead> Get(int id) => service.Find(id);
     [HttpPost] public Task<Lead> Create(LeadRequest r) => service.Save(null, r);

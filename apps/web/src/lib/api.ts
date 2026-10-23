@@ -10,10 +10,10 @@ export class ApiError extends Error {
     super(message);
   }
 }
-export async function api<T>(
+async function request(
   path: string,
   options: RequestInit = {},
-): Promise<T> {
+): Promise<Response> {
   const headers = new Headers(options.headers);
   if (options.body) headers.set("Content-Type", "application/json");
   if (options.method && !["GET", "HEAD"].includes(options.method)) {
@@ -52,7 +52,27 @@ export async function api<T>(
       response.status,
     );
   }
+  return response;
+}
+export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const response = await request(path, options);
   return response.status === 204 ? (undefined as T) : response.json();
+}
+export async function downloadFile(path: string, filename: string, signal?: AbortSignal) {
+  const response = await request(path, { signal });
+  const blob = await response.blob();
+  if (signal?.aborted) return;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  try {
+    link.click();
+  } finally {
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
 }
 export const post = <T>(path: string, data?: unknown) =>
   api<T>(path, {
