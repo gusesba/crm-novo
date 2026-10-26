@@ -31,3 +31,18 @@ test("botões de personalização ficam desabilitados para figurinhas", () => {
   assert.match(html, /disabled="" aria-label="Inserir primeiro nome na mensagem 1"/);
   assert.match(html, /disabled="" aria-label="Inserir nome completo na mensagem 1"/);
 });
+
+test("cada mensagem permite selecionar vários anexos e prévia conserva todos com uma legenda", () => {
+  const html = renderToStaticMarkup(createElement(CampaignMessageSequence, {
+    messages: [{ id: "1", text: "Olá, ${nome}", attachments: [
+      { name: "a.png", mime: "image/png", data: "YQ==" },
+      { name: "b.txt", mime: "text/plain", data: "Yg==" },
+    ] }], onChange: () => {}, onError: () => {},
+  }));
+  assert.match(html, /type="file" multiple=""/);
+  assert.match(html, /Remover anexo 1: a.png/);
+  assert.match(html, /Remover anexo 2: b.txt/);
+  assert.match(html, /alt="a.png"/);
+  assert.match(html, /<span>b.txt<\/span>/);
+  assert.equal((html.match(/<p>Olá, Mariana Almeida<\/p>/g) || []).length, 1);
+});

@@ -23,6 +23,7 @@ export async function sendToPhone<T>(
       const result = await send(match.jid);
       return { result, chatId: match.jid, phone: match.jid.split("@")[0] };
     } catch (error) {
+      if (error && typeof error === "object" && "partial" in error && error.partial) throw error;
       signal?.throwIfAborted();
       lastError = error;
     }

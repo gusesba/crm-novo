@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { FormattedMessage } from "./formatted-message";
+import { messageAttachments } from "./attachment";
 
 const campaignLabels: Record<string, string> = {
   running: "Em andamento",
@@ -178,7 +179,7 @@ export function CampaignTracking() {
 
 function CampaignPreparedMessages({ campaignId }: { campaignId: string }) {
   const result = useResource<
-    { text?: string | null; attachment?: Attachment | null }[]
+    { text?: string | null; attachment?: Attachment | null; attachments?: Attachment[] | null }[]
   >(`/whatsapp/campaigns/${campaignId}/messages`);
   return (
     <section
@@ -200,11 +201,11 @@ function CampaignPreparedMessages({ campaignId }: { campaignId: string }) {
           <div className="campaign-saved-message" key={index}>
             <strong>Mensagem {index + 1}</strong>
             <div
-              className={`campaign-preview-bubble ${message.attachment?.mime === "image/webp" ? "sticker" : ""}`}
+              className={`campaign-preview-bubble ${messageAttachments(message).length === 1 && messageAttachments(message)[0].mime === "image/webp" ? "sticker" : ""}`}
             >
-              {message.attachment && (
-                <CampaignAttachmentPreview attachment={message.attachment} />
-              )}
+              {messageAttachments(message).map((attachment, position) => (
+                <CampaignAttachmentPreview key={position} attachment={attachment} />
+              ))}
               {message.text && <p><FormattedMessage text={message.text} /></p>}
             </div>
           </div>

@@ -76,6 +76,7 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
     [HttpPost("send"), RequestSizeLimit(24_000_000)]
     public async Task<JsonElement> Send(SendRequest r)
     {
+        ValidateAttachments(r.Attachment, r.Attachments);
         await EnsureCanMessage(r.ChatId);
         return await client.Send(current.Id, HttpMethod.Post, "send", r);
     }
@@ -117,9 +118,9 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
     [HttpPost("campaigns"), RequestSizeLimit(24_000_000)]
     public async Task<JsonElement> Campaign(CampaignRequest r)
     {
-        if (r.Messages is not { Length: > 0 and <= 10 } || r.Messages.Any(x => string.IsNullOrWhiteSpace(x.Text) && x.Attachment == null))
+        if (r.Messages is not { Length: > 0 and <= 10 } || r.Messages.Any(x => string.IsNullOrWhiteSpace(x.Text) && x.Attachment == null && x.Attachments is not { Length: > 0 }))
             throw new BusinessException("Adicione de 1 a 10 mensagens com texto ou anexo.");
-        if (r.Messages.Sum(x => x.Attachment?.Data.Length ?? 0) > 22_400_000)
+        if (r.Messages.SelectMany(x => ValidateAttachments(x.Attachment, x.Attachments)).Sum(x => (long)x.Data.Length) > 22_400_000)
             throw new BusinessException("Os anexos da sequência devem somar no máximo 16 MB.");
         if (r.IntervalVarianceSeconds > r.IntervalSeconds - 3)
             throw new BusinessException("A variação deve manter o intervalo mínimo em 3 segundos.");
@@ -197,6 +198,16 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
         if (!await db.Users.AnyAsync(x => x.Id == id && (current.BranchId == null || x.BranchId == current.BranchId))) throw new BusinessException("Usuário fora do escopo.", 403);
         return id.Value;
     }
+    private static AttachmentRequest[] ValidateAttachments(AttachmentRequest? attachment, AttachmentRequest[]? attachments)
+    {
+        if (attachment != null && attachments is { Length: > 0 })
+            throw new BusinessException("Use attachment ou attachments, sem combinar os dois campos.");
+        var files = attachments is { Length: > 0 } ? attachments : attachment != null ? [attachment] : Array.Empty<AttachmentRequest>();
+        if (files.Length > 10 || files.Any(x => x == null)) throw new BusinessException("Selecione até 10 anexos por mensagem.");
+        if (files.Sum(x => (long)(x.Data?.Length ?? 0)) > 22_400_000)
+            throw new BusinessException("Os anexos da mensagem devem somar no máximo 16 MB.");
+        return files;
+    }
     private async Task EnsureCanMessage(string chatId)
     {
         if (!chatId.EndsWith("@s.whatsapp.net")) throw new BusinessException("Selecione uma conversa individual com telefone identificado.");
@@ -213,12 +224,12 @@ public record ResolvePhoneRequest([Required, RegularExpression(@"^\d{10,15}$")] 
 public record ArchiveChatRequest([Required, MaxLength(100), RegularExpression(@"^[^@\s]+@(s\.whatsapp\.net|g\.us|lid)$")] string ChatId, [Required] bool? Archived);
 public record ReadChatRequest([Required, MaxLength(100), RegularExpression(@"^[^@\s]+@(s\.whatsapp\.net|g\.us|lid)$")] string ChatId,
     [Required, MaxLength(200)] string LastMessageId);
-public record SendRequest([Required] string ChatId, [MaxLength(10000)] string? Text, AttachmentRequest? Attachment, ContactRequest? Contact, string? ReplyTo);
+public record SendRequest([Required] string ChatId, [MaxLength(10000)] string? Text, AttachmentRequest? Attachment, ContactRequest? Contact, string? ReplyTo, AttachmentRequest[]? Attachments = null);
 public record EditRequest([Required] string ChatId, [Required, MaxLength(10000)] string Text);
 public record ReactionRequest([Required] string ChatId, [MaxLength(8)] string Emoji);
 public record ForwardRequest([Required] string ChatId);
 public record DeleteMessageRequest([Required] string ChatId, bool ForEveryone);
-public record CampaignMessageRequest([MaxLength(10000)] string? Text, AttachmentRequest? Attachment);
+public record CampaignMessageRequest([MaxLength(10000)] string? Text, AttachmentRequest? Attachment, AttachmentRequest[]? Attachments = null);
 public record CampaignRequest([Required, MaxLength(160)] string Name, CampaignMessageRequest[] Messages,
     int[]? LeadIds, int? GroupId, string? Status, int? ServiceId,
     [Range(3, 3600)] int IntervalSeconds = 10, [Range(0, 1800)] int IntervalVarianceSeconds = 3,

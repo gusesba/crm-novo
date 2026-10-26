@@ -2,6 +2,7 @@ import {
   downloadMediaMessage,
   normalizeMessageContent,
   type AnyMessageContent,
+  type WASocket,
 } from "@whiskeysockets/baileys";
 import pino from "pino";
 import { convertVoiceNote } from "./voice-note.js";
@@ -14,10 +15,57 @@ import {
   rawMessage,
   saveMessage,
 } from "../storage/messages.js";
-import type { SendInput } from "./schemas.js";
+import { messageAttachments, type SendInput } from "./schemas.js";
 
-export async function sendMessage(user: string, input: SendInput) {
-  const socket = connectedSocket(user);
+export async function sendMessage(
+  user: string,
+  input: SendInput,
+  getSocket: (user: string) => Pick<WASocket, "sendMessage"> = connectedSocket,
+  signal?: AbortSignal,
+) {
+  const files = messageAttachments(input);
+  // Valida o lote inteiro antes do primeiro envio para não enviar parte de uma seleção inválida.
+  let totalSize = 0;
+  for (const file of files) {
+    const size = Buffer.from(file.data, "base64").length;
+    totalSize += size;
+    if (!size || size > 16 * 1024 * 1024)
+      throw Object.assign(new Error("O anexo deve ter conteúdo e no máximo 16 MB."), { statusCode: 400 });
+  }
+  if (totalSize > 16 * 1024 * 1024)
+    throw Object.assign(new Error("Os anexos devem somar no máximo 16 MB."), { statusCode: 400 });
+  const socket = getSocket(user);
+  if (!input.attachments?.length) return sendSingleMessage(user, input, socket);
+  const ids: string[] = [];
+  let sentAttachments = 0;
+  let textSent = false;
+  const captionIndex = files.findIndex((file) => file.asDocument || (file.mime !== "image/webp" && !file.mime.startsWith("audio/")));
+  try {
+    for (const [index, file] of files.entries()) {
+      signal?.throwIfAborted();
+      const text = index === captionIndex ? input.text : undefined;
+      const result = await sendSingleMessage(user, {
+        chatId: input.chatId, attachment: file, text,
+        replyTo: index === 0 ? input.replyTo : undefined,
+      }, socket);
+      ids.push(result.id);
+      sentAttachments++;
+      if (text?.trim()) textSent = true;
+    }
+    if (input.text?.trim() && !textSent) {
+      signal?.throwIfAborted();
+      const result = await sendSingleMessage(user, { chatId: input.chatId, text: input.text }, socket);
+      ids.push(result.id);
+      textSent = true;
+    }
+  } catch (error) {
+    if (!ids.length) throw error;
+    return { id: ids.at(-1)!, ids, sent: false as const, sentAttachments, textSent,
+      error: `${sentAttachments} de ${files.length} anexos confirmados. ${error instanceof Error ? error.message : "Falha no envio."} Confira o histórico antes de tentar novamente.` };
+  }
+  return { id: ids.at(-1)!, ids, sent: true as const, sentAttachments, textSent };
+}
+async function sendSingleMessage(user: string, input: SendInput, socket: Pick<WASocket, "sendMessage">) {
   let content: AnyMessageContent = { text: input.text || "" };
   if (input.contact) {
     const { name, phone } = input.contact;
@@ -86,7 +134,7 @@ export async function sendMessage(user: string, input: SendInput) {
   if (!result?.key.id) throw new Error("O WhatsApp não confirmou o envio.");
   saveMessage(user, result);
   // Áudios não aceitam legenda: enviar o texto como mensagem separada.
-  if (input.attachment?.mime.startsWith("audio/") && input.text?.trim()) {
+  if (input.attachment?.mime.startsWith("audio/") && !input.attachment.asDocument && input.text?.trim()) {
     const caption = await socket.sendMessage(input.chatId, {
       text: input.text,
     });
@@ -94,7 +142,7 @@ export async function sendMessage(user: string, input: SendInput) {
       throw new Error("O áudio foi enviado, mas o texto não foi confirmado.");
     saveMessage(user, caption);
   }
-  return { id: result.key.id, sent: true };
+  return { id: result.key.id, sent: true as const };
 }
 export async function editMessage(
   user: string,

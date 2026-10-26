@@ -3,6 +3,14 @@ import { test } from "node:test";
 import { sendToPhone } from "../src/campaigns/send-to-phone.js";
 import { phoneVariants } from "../src/messaging/resolve-phone.js";
 
+test("partial attachment delivery never retries another phone variant", async () => {
+  const calls: string[] = [];
+  const failure = Object.assign(new Error("Um anexo já foi confirmado"), { partial: true });
+  await assert.rejects(sendToPhone("5199991234", async (candidate) => [{ exists: true, jid: `${candidate}@s.whatsapp.net` }],
+    async (jid) => { calls.push(jid); throw failure; }), failure);
+  assert.equal(calls.length, 1);
+});
+
 test("Sends to the registered number without requiring a stored conversation", async () => {
   const lookups: string[] = [];
   const sends: string[] = [];

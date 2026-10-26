@@ -8,7 +8,7 @@ import { ComposerAttachmentMenu } from "./composer-attachment-menu";
 import { ComposerEmojiPicker } from "./composer-emoji-picker";
 import { ContactPicker } from "./contact-picker";
 import { VoiceRecorder } from "./voice-recorder";
-import { pasteAttachment } from "./attachment";
+import { mergeAttachments, pasteAttachment } from "./attachment";
 export function MessageComposer({
   chatId,
   chats,
@@ -25,18 +25,26 @@ export function MessageComposer({
   onSent: () => void;
 }) {
   const [text, setText] = useState(editing?.text || "");
-  const [attachment, setAttachment] = useState<Attachment>();
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const latestAttachments = useRef(attachments);
+  latestAttachments.current = attachments;
+  const [readingFiles, setReadingFiles] = useState(0);
+  const onReadingChange = (reading: boolean) => setReadingFiles((count) => count + (reading ? 1 : -1));
   const [contact, setContact] = useState<SharedContact>();
   const [choosingContact, setChoosingContact] = useState(false);
   const [recording, setRecording] = useState(false);
-  const isSticker = attachment?.mime === "image/webp" && !attachment.asDocument;
+  const isSticker = attachments.length === 1 && attachments[0].mime === "image/webp" && !attachments[0].asDocument;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const textarea = useRef<HTMLTextAreaElement>(null);
-  function selectAttachment(file: Attachment) {
-    setAttachment(file);
-    setContact(undefined);
-    if (file.mime === "image/webp" && !file.asDocument) setText("");
+  function selectAttachments(files: Attachment[]) {
+    try {
+      const next = mergeAttachments(latestAttachments.current, files);
+      latestAttachments.current = next;
+      setAttachments(next);
+      setContact(undefined);
+      if (next.length === 1 && next[0].mime === "image/webp" && !next[0].asDocument) setText("");
+    } catch (error) { setError((error as Error).message); }
   }
   function insertEmoji(emoji: string) {
     const input = textarea.current;
@@ -52,22 +60,31 @@ export function MessageComposer({
   }
   async function send(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (recording || (!text.trim() && !attachment && !contact)) return;
+    if (busy || readingFiles || recording || (!text.trim() && !attachments.length && !contact)) return;
     setBusy(true);
     setError("");
     try {
       if (editing)
         await put(`/whatsapp/messages/${editing.id}`, { chatId, text });
-      else
-        await post("/whatsapp/send", {
+      else {
+        const result = await post<{ sent: boolean; sentAttachments?: number; textSent?: boolean; error?: string }>("/whatsapp/send", {
           chatId,
           text,
-          attachment,
+          attachments,
           contact,
           replyTo: reply?.id,
         });
+        if (result.sent === false) {
+          setAttachments(attachments.slice(result.sentAttachments || 0));
+          if (result.textSent) setText("");
+          if (result.sentAttachments) clearSelection();
+          onSent();
+          setError(result.error || "Parte dos anexos foi enviada. Confira o histórico antes de continuar.");
+          return;
+        }
+      }
       setText("");
-      setAttachment(undefined);
+      setAttachments([]);
       setContact(undefined);
       clearSelection();
       onSent();
@@ -84,7 +101,7 @@ export function MessageComposer({
         onSubmit={send}
         onPaste={(event) => {
           if (!editing && !busy && !recording)
-            pasteAttachment(event, selectAttachment, setError);
+            pasteAttachment(event, selectAttachments, setError, onReadingChange);
         }}
       >
         {error && <ErrorBox message={error} />}{" "}
@@ -104,21 +121,22 @@ export function MessageComposer({
             </button>
           </div>
         )}
-        {!editing && (attachment || contact) && (
+        {!editing && (!!attachments.length || contact) && (
           <div className="composer-options">
-            {attachment && (
-              <div className="attachment-tag">
+            {attachments.map((attachment, index) => (
+              <div className="attachment-tag" key={index}>
                 <Paperclip size={14} />
                 {attachment.name}
                 <button
                   type="button"
-                  aria-label="Remover anexo"
-                  onClick={() => setAttachment(undefined)}
+                  aria-label={`Remover anexo ${index + 1}: ${attachment.name}`}
+                  disabled={busy}
+                  onClick={() => setAttachments((files) => files.filter((_, position) => position !== index))}
                 >
                   <X size={13} />
                 </button>
               </div>
-            )}
+            ))}
             {contact && (
               <div className="attachment-tag">
                 <ContactRound size={14} />
@@ -126,33 +144,29 @@ export function MessageComposer({
                 <button
                   type="button"
                   aria-label="Remover contato"
+                  disabled={busy}
                   onClick={() => setContact(undefined)}
                 >
                   <X size={13} />
                 </button>
               </div>
             )}
-            {attachment?.voiceNote && (
+            {attachments.map((attachment, index) => attachment.voiceNote && (
               <audio
                 className="voice-preview"
+                key={index}
                 controls
                 src={`data:${attachment.mime};base64,${attachment.data}`}
               />
-            )}
-            {isSticker && (
+            ))}
+            {attachments.map((attachment, index) => attachment.mime.startsWith("image/") && !attachment.asDocument && (
               <img
                 className="composer-sticker-preview"
-                src={`data:image/webp;base64,${attachment.data}`}
-                alt="Prévia da figurinha selecionada"
-              />
-            )}
-            {attachment?.mime.startsWith("image/") && !isSticker && !attachment.asDocument && (
-              <img
-                className="composer-sticker-preview"
+                key={index}
                 src={`data:${attachment.mime};base64,${attachment.data}`}
                 alt={`Prévia de ${attachment.name}`}
               />
-            )}
+            ))}
           </div>
         )}
         <div className="composer-input">
@@ -161,7 +175,8 @@ export function MessageComposer({
               disabled={busy || recording}
               onError={setError}
               onContact={() => setChoosingContact(true)}
-              onFile={selectAttachment}
+              onFile={selectAttachments}
+              onReadingChange={onReadingChange}
             />
           )}
           <ComposerEmojiPicker
@@ -170,20 +185,18 @@ export function MessageComposer({
             allowSticker={!editing}
             onError={setError}
             onStickerSelect={(file) => {
-              setAttachment(file);
-              setContact(undefined);
-              setText("");
+              selectAttachments([file]);
             }}
           />
           {!editing &&
-            (recording || (!attachment && !contact && !text.trim())) && (
+            (recording || (!attachments.length && !contact && !text.trim())) && (
               <VoiceRecorder
                 disabled={busy}
                 compact
                 onError={setError}
                 onRecordingChange={setRecording}
                 onRecorded={(file) => {
-                  setAttachment(file);
+                  setAttachments([file]);
                   setText("");
                 }}
               />
@@ -202,7 +215,7 @@ export function MessageComposer({
               rows={1}
               maxLength={10000}
               value={text}
-              disabled={isSticker || !!contact || recording}
+              disabled={busy || isSticker || !!contact || recording}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -210,7 +223,7 @@ export function MessageComposer({
                   if (
                     !busy &&
                     !recording &&
-                    (text.trim() || attachment || contact)
+                    (text.trim() || attachments.length || contact)
                   )
                     e.currentTarget.form?.requestSubmit();
                 }
@@ -220,12 +233,12 @@ export function MessageComposer({
           <button
             className="button primary"
             disabled={
-              busy || recording || (!text.trim() && !attachment && !contact)
+              busy || !!readingFiles || recording || (!text.trim() && !attachments.length && !contact)
             }
             aria-label={editing ? "Salvar edição" : "Enviar mensagem"}
           >
             <Send size={17} />
-            {busy ? "…" : editing ? "Salvar" : "Enviar"}
+            {busy ? "…" : readingFiles ? "Lendo anexos…" : editing ? "Salvar" : "Enviar"}
           </button>
         </div>
       </form>
@@ -235,7 +248,7 @@ export function MessageComposer({
           onClose={() => setChoosingContact(false)}
           onSelect={(selected) => {
             setContact(selected);
-            setAttachment(undefined);
+            setAttachments([]);
             setText("");
             setChoosingContact(false);
           }}

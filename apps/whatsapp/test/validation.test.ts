@@ -32,6 +32,23 @@ test("disparos precisam de destinatários e conteúdo", () => {
     false,
   );
 });
+
+test("mensagens e disparos aceitam múltiplos anexos sem misturar formato legado e respeitam limites", () => {
+  const file = { name: "a.pdf", mime: "application/pdf", data: "YQ==" };
+  const chatId = "5551999999999@s.whatsapp.net";
+  for (const attachments of [[file, file], Array(10).fill(file)]) {
+    assert.equal(sendSchema.safeParse({ chatId, attachments }).success, true);
+    assert.equal(campaignSchema.safeParse({ ...campaign, messages: [{ attachments }] }).success, true);
+  }
+  for (const attachments of [[], Array(11).fill(file), [{ ...file, data: "a".repeat(11_200_001) }, { ...file, data: "b".repeat(11_200_001) }]]) {
+    assert.equal(sendSchema.safeParse({ chatId, attachments }).success, false);
+    assert.equal(campaignSchema.safeParse({ ...campaign, messages: [{ attachments }] }).success, false);
+  }
+  assert.equal(sendSchema.safeParse({ chatId, attachment: file, attachments: [file] }).success, false);
+  assert.equal(campaignSchema.safeParse({ ...campaign, messages: [{ attachment: file, attachments: [file] }] }).success, false);
+  assert.equal(sendSchema.safeParse({ chatId, attachments: [file], contact: { name: "Ana", phone: "5551999999999" } }).success, false);
+  assert.equal(sendSchema.safeParse({ chatId, attachments: [{ ...file, voiceNote: true }] }).success, false);
+});
 test("intervalo mínimo impede loops sem pausa", () => {
   assert.equal(
     campaignSchema.safeParse({ ...campaign, intervalSeconds: 0 }).success,

@@ -138,12 +138,16 @@ async function run(
         );
       },
       send: async (recipient, message) => {
-        const send = (chatId: string) =>
-          sendMessage(user, {
+        const send = async (chatId: string) => {
+          const result = await sendMessage(user, {
             chatId,
             text: message.text,
             attachment: message.attachment,
-          });
+            attachments: message.attachments,
+          }, connectedSocket, signal);
+          if (!result.sent) throw Object.assign(new Error(result.error), { partial: true });
+          return result;
+        };
         const destination = destinations.get(recipient.leadId);
         if (destination)
           return { ...(await send(destination)), phone: destination.split("@")[0] };

@@ -9,23 +9,31 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { AttachmentPicker, pasteAttachment } from "./attachment";
+import { AttachmentPicker, mergeAttachments, messageAttachments, pasteAttachment } from "./attachment";
 import { FormattedMessage } from "./formatted-message";
 
 export interface CampaignMessageDraft {
   id: string;
   text: string;
   attachment?: Attachment;
+  attachments?: Attachment[];
+}
+
+function isSticker(message: CampaignMessageDraft) {
+  const files = messageAttachments(message);
+  return files.length === 1 && files[0].mime === "image/webp";
 }
 
 export function CampaignMessageSequence({
   messages,
   onChange,
   onError,
+  onReadingChange,
 }: {
   messages: CampaignMessageDraft[];
   onChange: (messages: CampaignMessageDraft[]) => void;
   onError: (message: string) => void;
+  onReadingChange?: (reading: boolean) => void;
 }) {
   const textareas = useRef(new Map<string, HTMLTextAreaElement>());
   const latestMessages = useRef(messages);
@@ -75,14 +83,18 @@ export function CampaignMessageSequence({
     ]);
   }
 
-  function updateAttachment(id: string, attachment?: Attachment) {
-    if (!latestMessages.current.some((message) => message.id === id)) return;
+  function updateAttachments(id: string, files: Attachment[], append = false) {
+    const current = latestMessages.current.find((message) => message.id === id);
+    if (!current) return;
+    let attachments: Attachment[];
+    try { attachments = mergeAttachments(append ? messageAttachments(current) : [], files); }
+    catch (error) { onError((error as Error).message); return; }
     const encodedSize = latestMessages.current.reduce(
       (total, message) =>
         total +
         (message.id === id
-          ? attachment?.data.length || 0
-          : message.attachment?.data.length || 0),
+          ? attachments.reduce((sum, file) => sum + file.data.length, 0)
+          : messageAttachments(message).reduce((sum, file) => sum + file.data.length, 0)),
       0,
     );
     if (encodedSize > 22_400_000) {
@@ -90,8 +102,9 @@ export function CampaignMessageSequence({
       return;
     }
     update(id, {
-      attachment,
-      ...(attachment?.mime === "image/webp" ? { text: "" } : {}),
+      attachment: undefined,
+      attachments,
+      ...(attachments.length === 1 && attachments[0].mime === "image/webp" ? { text: "" } : {}),
     });
   }
 
@@ -110,7 +123,7 @@ export function CampaignMessageSequence({
           <div
             className="campaign-message-editor"
             key={message.id}
-            onPaste={(event) => pasteAttachment(event, (attachment) => updateAttachment(message.id, attachment), onError)}
+            onPaste={(event) => pasteAttachment(event, (files) => updateAttachments(message.id, files, true), onError, onReadingChange)}
           >
             <div className="campaign-message-editor-heading">
               <strong>Mensagem {index + 1}</strong>
@@ -155,12 +168,12 @@ export function CampaignMessageSequence({
               rows={3}
               maxLength={10000}
               value={message.text}
-              disabled={message.attachment?.mime === "image/webp"}
+              disabled={isSticker(message)}
               onChange={(event) =>
                 update(message.id, { text: event.target.value })
               }
               placeholder={
-                message.attachment?.mime === "image/webp"
+                isSticker(message)
                   ? "Figurinhas são enviadas sem texto"
                   : index === 0
                     ? "Olá, ${PrimeiroNome}!"
@@ -176,7 +189,7 @@ export function CampaignMessageSequence({
                 <button
                   key={token}
                   type="button"
-                  disabled={message.attachment?.mime === "image/webp"}
+                  disabled={isSticker(message)}
                   aria-label={`Inserir ${label} na mensagem ${index + 1}`}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => insertToken(message, token)}
@@ -186,11 +199,11 @@ export function CampaignMessageSequence({
               ))}
             </div>
             <AttachmentPicker
-              value={message.attachment}
-              onChange={(attachment) =>
-                updateAttachment(message.id, attachment)
-              }
+              value={messageAttachments(message)}
+              onChange={(files) => updateAttachments(message.id, files)}
+              onAdd={(files) => updateAttachments(message.id, files, true)}
               onError={onError}
+              onReadingChange={onReadingChange}
             />
           </div>
         ))}
@@ -211,7 +224,7 @@ export function CampaignMessageSequence({
 
 function CampaignPreview({ messages }: { messages: CampaignMessageDraft[] }) {
   const visible = messages.filter(
-    (message) => message.text.trim() || message.attachment,
+    (message) => message.text.trim() || messageAttachments(message).length,
   );
   return (
     <section className="campaign-preview" aria-label="Preview do disparo">
@@ -230,14 +243,14 @@ function CampaignPreview({ messages }: { messages: CampaignMessageDraft[] }) {
         ) : (
           visible.map((message) => (
             <div
-              className={`campaign-preview-bubble ${message.attachment?.mime === "image/webp" ? "sticker" : ""}`}
+              className={`campaign-preview-bubble ${isSticker(message) ? "sticker" : ""}`}
               key={message.id}
             >
-              {message.attachment && (
-                <CampaignAttachmentPreview attachment={message.attachment} />
-              )}
+              {messageAttachments(message).map((attachment, index) => (
+                <CampaignAttachmentPreview key={index} attachment={attachment} />
+              ))}
               {message.text.trim() &&
-                message.attachment?.mime !== "image/webp" && (
+                !isSticker(message) && (
                   <p>
                     <FormattedMessage text={message.text.replaceAll("${PrimeiroNome}", "Mariana").replaceAll("${nome}", "Mariana Almeida").replaceAll("{{nome}}", "Mariana Almeida")} />
                   </p>

@@ -20,6 +20,7 @@ import {
 import { CampaignTracking } from "./campaign-tracking";
 import { Connection } from "./connection";
 import { CampaignAudienceFilter } from "./campaign-audience-filter";
+import { messageAttachments } from "./attachment";
 export function CampaignsPage() {
   const { user, catalog, notify } = useApp();
   const groups = useResource<LeadGroup[]>("/groups");
@@ -28,6 +29,7 @@ export function CampaignsPage() {
     { id: "message-1", text: "" },
   ]);
   const [busy, setBusy] = useState(false);
+  const [readingFiles, setReadingFiles] = useState(0);
   const [error, setError] = useState("");
   const [mode, setMode] = useState("all");
   const [allSelected, setAllSelected] = useState(true);
@@ -106,10 +108,10 @@ export function CampaignsPage() {
   }
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (invalidDates) return;
+    if (invalidDates || readingFiles) return;
     setError("");
     const invalidIndex = messages.findIndex(
-      (message) => !message.text.trim() && !message.attachment,
+      (message) => !message.text.trim() && !messageAttachments(message).length,
     );
     if (invalidIndex >= 0) {
       setError(`Preencha ou remova a mensagem ${invalidIndex + 1}.`);
@@ -119,7 +121,7 @@ export function CampaignsPage() {
     const f = new FormData(e.currentTarget);
     const payload = {
       name: f.get("name"),
-      messages: messages.map(({ text, attachment }) => ({ text, attachment })),
+      messages: messages.map((message) => ({ text: message.text, attachments: messageAttachments(message) })),
       leadIds: allSelected ? null : selected,
       excludedLeadIds: excluded,
       ...audience,
@@ -390,6 +392,7 @@ export function CampaignsPage() {
               messages={messages}
               onChange={setMessages}
               onError={setError}
+              onReadingChange={(reading) => setReadingFiles((count) => count + (reading ? 1 : -1))}
             />
             <div className="form-grid">
               <Field label="Intervalo médio entre mensagens (seg.)">
@@ -441,6 +444,7 @@ export function CampaignsPage() {
               className="button primary"
               disabled={
                 busy ||
+                !!readingFiles ||
                 invalidDates ||
                 leads.loading ||
                 selectionCount === 0 ||
@@ -448,7 +452,7 @@ export function CampaignsPage() {
               }
             >
               <Send size={16} />
-              {busy ? "Preparando…" : "Enviar disparos"}
+              {busy ? "Preparando…" : readingFiles ? "Lendo anexos…" : "Enviar disparos"}
             </button>
           </form>
         </section>

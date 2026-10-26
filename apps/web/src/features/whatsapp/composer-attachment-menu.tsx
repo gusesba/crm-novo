@@ -8,18 +8,20 @@ import {
   Plus,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { readAttachment } from "./attachment";
+import { readAttachments } from "./attachment";
 
 export function ComposerAttachmentMenu({
   disabled,
   onFile,
   onContact,
   onError,
+  onReadingChange,
 }: {
   disabled: boolean;
-  onFile: (file: Attachment) => void;
+  onFile: (files: Attachment[]) => void;
   onContact: () => void;
   onError: (message: string) => void;
+  onReadingChange: (reading: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -49,7 +51,7 @@ export function ComposerAttachmentMenu({
   }
 
   function selected(input: HTMLInputElement, asDocument = false) {
-    readAttachment(input.files?.[0], onFile, onError, asDocument);
+    readAttachments(Array.from(input.files || []), onFile, onError, asDocument, onReadingChange);
     input.value = "";
   }
 
@@ -111,6 +113,7 @@ export function ComposerAttachmentMenu({
         className="composer-file-input"
         type="file"
         aria-label="Escolher documento"
+        multiple
         onChange={(event) => selected(event.currentTarget, true)}
       />
       <input
@@ -119,6 +122,7 @@ export function ComposerAttachmentMenu({
         type="file"
         accept="image/png,image/jpeg,image/gif,video/*"
         aria-label="Escolher foto ou vídeo"
+        multiple
         onChange={(event) => selected(event.currentTarget)}
       />
       <input
@@ -127,6 +131,7 @@ export function ComposerAttachmentMenu({
         type="file"
         accept="audio/*"
         aria-label="Escolher áudio"
+        multiple
         onChange={(event) => selected(event.currentTarget)}
       />
     </div>
