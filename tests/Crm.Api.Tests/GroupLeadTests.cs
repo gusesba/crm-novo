@@ -20,6 +20,153 @@ public class GroupLeadTests
     }
 
     [Fact]
+    public async Task MultipleGroupFiltersCombineWithNoServiceAndAreRevalidatedOnSave()
+    {
+        using var factory = new ApiFactory();
+        using var admin = await factory.Login();
+        var date = new DateTime(2001, 2, 10, 12, 0, 0, DateTimeKind.Utc);
+        Lead[] leads;
+        int branchId, firstLabel, secondLabel, foreignLabel;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CrmDbContext>();
+            var branch = new Branch { Name = "Sede múltipla" };
+            var labelA = new LeadClassification { UserId = 1, Name = "A", Color = "#112233" };
+            var labelB = new LeadClassification { UserId = 1, Name = "B", Color = "#223344" };
+            var labelForeign = new LeadClassification { UserId = 2, Name = "Privada", Color = "#334455" };
+            db.Branches.Add(branch); db.Classifications.AddRange(labelA, labelB, labelForeign);
+            await db.SaveChangesAsync();
+            branchId = branch.Id; firstLabel = labelA.Id; secondLabel = labelB.Id; foreignLabel = labelForeign.Id;
+            leads = Enumerable.Range(0, 9).Select(i => new Lead { Name = $"Multigrupo {i}", Phone = $"55519885500{i:00}",
+                BranchId = i % 2 == 0 ? 1 : branchId, SellerId = i % 2 == 0 ? 2 : 1,
+                CurrentSellerId = i == 6 ? 3 : i % 2 == 0 ? 2 : 1,
+                Status = i == 4 ? LeadStatuses.Won : i % 2 == 0 ? LeadStatuses.Contact : LeadStatuses.Waiting,
+                ServiceId = i == 2 ? null : i == 3 ? 3 : i % 2 == 0 ? 1 : 2,
+                CreatedAt = i == 7 ? date.AddDays(-1) : date }).ToArray();
+            db.Leads.AddRange(leads); await db.SaveChangesAsync();
+            for (var i = 0; i < 8; i++) db.LeadClassifications.Add(new LeadClassificationMember { LeadId = leads[i].Id,
+                ClassificationId = i == 5 ? foreignLabel : i % 2 == 0 ? firstLabel : secondLabel });
+            db.LeadClassifications.Add(new LeadClassificationMember { LeadId = leads[0].Id, ClassificationId = secondLabel });
+            await db.SaveChangesAsync();
+        }
+        var statuses = new[] { LeadStatuses.Contact, LeadStatuses.Waiting };
+        var serviceIds = new[] { 1, 2, 1 }; var sellerIds = new[] { 1, 2 }; var branchIds = new[] { 1, branchId };
+        var classificationIds = new[] { firstLabel, secondLabel, foreignLabel };
+        var query = "search=Multigrupo&createdFrom=2001-02-10T03:00:00Z&createdTo=2001-02-11T03:00:00Z&includeNoService=true" +
+            string.Concat(statuses.Select(x => $"&statuses={Uri.EscapeDataString(x)}")) + string.Concat(serviceIds.Select(x => $"&serviceIds={x}")) +
+            string.Concat(sellerIds.Select(x => $"&sellerIds={x}")) + string.Concat(branchIds.Select(x => $"&branchIds={x}")) +
+            string.Concat(classificationIds.Select(x => $"&classificationIds={x}"));
+        var candidates = (await admin.GetFromJsonAsync<Lead[]>($"/api/groups/leads?{query}"))!;
+        var expected = leads.Take(3).Select(x => x.Id).ToArray();
+        Assert.Equal(expected, candidates.Select(x => x.Id).Order());
+        var response = await admin.PostAsJsonAsync("/api/groups", new { name = "Múltiplos filtros", statuses, serviceIds, sellerIds, branchIds,
+            classificationIds, includeNoService = true, search = "Multigrupo", createdFrom = date.Date.AddHours(3), createdTo = date.Date.AddDays(1).AddHours(3), leadIds = expected });
+        response.EnsureSuccessStatusCode();
+        var groupId = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt32();
+        var detail = await admin.GetFromJsonAsync<JsonElement>($"/api/groups/{groupId}");
+        Assert.Equal(expected, detail.GetProperty("members").EnumerateArray().Select(x => x.GetProperty("id").GetInt32()).Order());
+        var onlyNone = (await admin.GetFromJsonAsync<Lead[]>("/api/groups/leads?search=Multigrupo&includeNoService=true"))!;
+        Assert.Equal(leads[2].Id, Assert.Single(onlyNone).Id);
+        var cleared = (await admin.GetFromJsonAsync<Lead[]>("/api/groups/leads?search=Multigrupo"))!;
+        Assert.Equal(9, cleared.Length);
+        var legacyUnion = (await admin.GetFromJsonAsync<Lead[]>($"/api/groups/leads?search=Multigrupo&serviceId=1&serviceIds=2&classificationId={firstLabel}&classificationIds={secondLabel}&sellerId=2&sellerIds=1&branchId=1&branchIds={branchId}"))!;
+        Assert.Equal(new[] { leads[0].Id, leads[1].Id, leads[4].Id, leads[7].Id }, legacyUnion.Select(x => x.Id).Order());
+        Assert.Empty((await admin.GetFromJsonAsync<Lead[]>($"/api/groups/leads?search=Multigrupo&classificationIds={foreignLabel}"))!);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CrmDbContext>();
+            (await db.Leads.FindAsync(leads[2].Id))!.ServiceId = 3;
+            await db.SaveChangesAsync();
+        }
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.PutAsJsonAsync($"/api/groups/{groupId}", new { name = "Não deve salvar",
+            statuses, serviceIds, sellerIds, branchIds, classificationIds, includeNoService = true, leadIds = expected })).StatusCode);
+        detail = await admin.GetFromJsonAsync<JsonElement>($"/api/groups/{groupId}");
+        Assert.Equal("Múltiplos filtros", detail.GetProperty("name").GetString());
+        Assert.Equal(3, detail.GetProperty("members").GetArrayLength());
+        (await admin.PutAsJsonAsync($"/api/groups/{groupId}", new { name = "Atualizado", serviceIds, sellerIds, branchIds,
+            classificationIds, leadIds = expected.Take(2).ToArray() })).EnsureSuccessStatusCode();
+        detail = await admin.GetFromJsonAsync<JsonElement>($"/api/groups/{groupId}");
+        Assert.Equal(2, detail.GetProperty("members").GetArrayLength());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task MultipleGroupFiltersPreserveSellerAndBranchPermissions(bool sellers)
+    {
+        using var factory = new ApiFactory();
+        using var seller = await factory.Login("camila");
+        var query = sellers ? "sellerIds=2&sellerIds=3" : "branchIds=1&branchIds=2";
+        Assert.Equal(HttpStatusCode.Forbidden, (await seller.GetAsync($"/api/groups/leads?{query}")).StatusCode);
+        var payload = new { name = "Não permitido", sellerIds = sellers ? new[] { 2, 3 } : null, branchIds = sellers ? null : new[] { 1, 2 }, leadIds = new[] { 1 } };
+        Assert.Equal(HttpStatusCode.Forbidden, (await seller.PostAsJsonAsync("/api/groups", payload)).StatusCode);
+        var own = await seller.PostAsJsonAsync("/api/groups", new { name = "Próprio", leadIds = new[] { 1 } });
+        own.EnsureSuccessStatusCode();
+        var groupId = (await own.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt32();
+        Assert.Equal(HttpStatusCode.Forbidden, (await seller.PutAsJsonAsync($"/api/groups/{groupId}", payload)).StatusCode);
+    }
+
+    [Fact]
+    public async Task MultipleStatusesFilterCandidatesAndGroupCreationWithoutDuplicates()
+    {
+        using var factory = new ApiFactory();
+        using var admin = await factory.Login();
+        var all = (await admin.GetFromJsonAsync<Lead[]>("/api/groups/leads"))!;
+        var expected = all.Where(x => x.Status is LeadStatuses.Contact or LeadStatuses.Waiting).Select(x => x.Id).Order().ToArray();
+        var candidates = (await admin.GetFromJsonAsync<Lead[]>("/api/groups/leads?statuses=Agendar%20Contato&statuses=Stand%20By&statuses=Agendar%20Contato"))!;
+        Assert.Contains(candidates, x => x.Status == LeadStatuses.Contact);
+        Assert.Contains(candidates, x => x.Status == LeadStatuses.Waiting);
+        Assert.Equal(expected, candidates.Select(x => x.Id).Order());
+        var response = await admin.PostAsJsonAsync("/api/groups", new { name = "Contato e Stand By",
+            statuses = new[] { LeadStatuses.Contact, LeadStatuses.Waiting } });
+        response.EnsureSuccessStatusCode();
+        var groupId = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt32();
+        var detail = await admin.GetFromJsonAsync<JsonElement>($"/api/groups/{groupId}");
+        Assert.Equal(expected, detail.GetProperty("members").EnumerateArray().Select(x => x.GetProperty("id").GetInt32()).Order());
+        var legacy = (await admin.GetFromJsonAsync<Lead[]>("/api/groups/leads?status=Agendar%20Contato&statuses=Stand%20By"))!;
+        Assert.Equal(expected, legacy.Select(x => x.Id).Order());
+        var cleared = (await admin.GetFromJsonAsync<Lead[]>("/api/groups/leads"))!;
+        Assert.Equal(all.Length, cleared.Length);
+        using var seller = await factory.Login("camila");
+        var mine = (await seller.GetFromJsonAsync<Lead[]>("/api/groups/leads?statuses=Agendar%20Contato&statuses=Stand%20By"))!;
+        Assert.NotEmpty(mine);
+        Assert.All(mine, lead => { Assert.Equal(2, lead.CurrentSellerId); Assert.Equal(1, lead.BranchId); });
+    }
+
+    [Fact]
+    public async Task MultipleStatusesAreRevalidatedOnSaveAndEditingWithoutFilterPreservesOtherStatuses()
+    {
+        using var factory = new ApiFactory();
+        using var admin = await factory.Login();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CrmDbContext>();
+            (await db.Leads.FindAsync(1))!.Status = LeadStatuses.Contact;
+            (await db.Leads.FindAsync(2))!.Status = LeadStatuses.Waiting;
+            (await db.Leads.FindAsync(3))!.Status = LeadStatuses.Won;
+            await db.SaveChangesAsync();
+        }
+        var statuses = new[] { LeadStatuses.Contact, LeadStatuses.Waiting };
+        var response = await admin.PostAsJsonAsync("/api/groups", new { name = "Status iniciais", statuses, leadIds = new[] { 1, 2 } });
+        response.EnsureSuccessStatusCode();
+        var groupId = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetInt32();
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.PostAsJsonAsync("/api/groups", new { name = "Fora dos status", statuses, leadIds = new[] { 1, 3 } })).StatusCode);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CrmDbContext>();
+            (await db.Leads.FindAsync(2))!.Status = LeadStatuses.Won;
+            await db.SaveChangesAsync();
+        }
+        Assert.Equal(HttpStatusCode.Forbidden, (await admin.PutAsJsonAsync($"/api/groups/{groupId}", new { name = "Não deve salvar", statuses, leadIds = new[] { 1, 2 } })).StatusCode);
+        var detail = await admin.GetFromJsonAsync<JsonElement>($"/api/groups/{groupId}");
+        Assert.Equal("Status iniciais", detail.GetProperty("name").GetString());
+        Assert.Equal(2, detail.GetProperty("members").GetArrayLength());
+        (await admin.PutAsJsonAsync($"/api/groups/{groupId}", new { name = "Todos os status", statuses = Array.Empty<string>(), leadIds = new[] { 1, 2, 3 } })).EnsureSuccessStatusCode();
+        detail = await admin.GetFromJsonAsync<JsonElement>($"/api/groups/{groupId}");
+        Assert.Equal(new[] { 1, 2, 3 }, detail.GetProperty("members").EnumerateArray().Select(x => x.GetProperty("id").GetInt32()).Order());
+    }
+
+    [Fact]
     public async Task ClassificationFilterIsPersonalAndPreservesGroupLeadScope()
     {
         using var factory = new ApiFactory();

@@ -31,7 +31,9 @@ export function CampaignAudienceFilter({ label, options, values, onChange, empty
       <div ref={root} className="campaign-filter-control"
         onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}
         onKeyDown={(event) => {
-          if (event.key === "Escape") {
+          if (event.key === "Escape" && open) {
+            event.preventDefault();
+            event.stopPropagation();
             setOpen(false);
             button.current?.focus();
           }

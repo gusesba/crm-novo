@@ -18,8 +18,9 @@ public class GroupsController(CrmDbContext db, CurrentUser current) : Controller
             .Select(x => new { x.Id, x.Name, count = x.Members.Count(m => leads.Any(l => l.Id == m.LeadId)) }).ToListAsync();
     }
     [HttpGet("leads")]
-    public async Task<List<Lead>> Leads(string? status, int? serviceId, int? sellerId, int? branchId, DateTime? createdFrom, DateTime? createdTo, string? search, int? classificationId)
-        => await FilterLeads(status, serviceId, sellerId, branchId, createdFrom, createdTo, search, classificationId)
+    public async Task<List<Lead>> Leads(string? status, int? serviceId, int? sellerId, int? branchId, DateTime? createdFrom, DateTime? createdTo, string? search, int? classificationId, [FromQuery] string[]? statuses,
+        [FromQuery] int[]? serviceIds, [FromQuery] int[]? sellerIds, [FromQuery] int[]? branchIds, [FromQuery] int[]? classificationIds, bool includeNoService = false)
+        => await FilterLeads(status, serviceId, sellerId, branchId, createdFrom, createdTo, search, classificationId, statuses, serviceIds, sellerIds, branchIds, classificationIds, includeNoService)
             .AsNoTracking().OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id).ToListAsync();
     [HttpGet("{id:int}")]
     public async Task<object> Get(int id)
@@ -48,18 +49,25 @@ public class GroupsController(CrmDbContext db, CurrentUser current) : Controller
         var query = current.Scope(db.Leads);
         return current.IsAdmin ? query : query.Where(x => x.CurrentSellerId == current.Id);
     }
-    private IQueryable<Lead> FilterLeads(string? status, int? serviceId, int? sellerId, int? branchId, DateTime? createdFrom, DateTime? createdTo, string? search, int? classificationId)
+    private IQueryable<Lead> FilterLeads(string? status, int? serviceId, int? sellerId, int? branchId, DateTime? createdFrom, DateTime? createdTo, string? search, int? classificationId, string[]? statuses,
+        int[]? serviceIds, int[]? sellerIds, int[]? branchIds, int[]? classificationIds, bool includeNoService)
     {
-        if (sellerId.HasValue && !current.IsAdmin) throw new BusinessException("Filtro de vendedor disponível apenas para administradores.", 403);
-        if (branchId.HasValue && !(current.IsAdmin && current.BranchId == null)) throw new BusinessException("Filtro de sede disponível apenas para o administrador geral.", 403);
+        var selectedServices = (serviceIds ?? []).Concat(serviceId.HasValue ? [serviceId.Value] : []).Distinct().ToArray();
+        var selectedSellers = (sellerIds ?? []).Concat(sellerId.HasValue ? [sellerId.Value] : []).Distinct().ToArray();
+        var selectedBranches = (branchIds ?? []).Concat(branchId.HasValue ? [branchId.Value] : []).Distinct().ToArray();
+        var selectedClassifications = (classificationIds ?? []).Concat(classificationId.HasValue ? [classificationId.Value] : []).Distinct().ToArray();
+        if (selectedSellers.Length > 0 && !current.IsAdmin) throw new BusinessException("Filtro de vendedor disponível apenas para administradores.", 403);
+        if (selectedBranches.Length > 0 && !(current.IsAdmin && current.BranchId == null)) throw new BusinessException("Filtro de sede disponível apenas para o administrador geral.", 403);
         if (createdFrom > createdTo) throw new BusinessException("A data inicial deve ser anterior ou igual à data final.");
         var query = AccessibleLeads();
-        if (!string.IsNullOrWhiteSpace(status)) query = query.Where(x => x.Status == status);
-        if (serviceId.HasValue) query = query.Where(x => x.ServiceId == serviceId);
-        if (sellerId.HasValue) query = query.Where(x => x.CurrentSellerId == sellerId);
-        if (branchId.HasValue) query = query.Where(x => x.BranchId == branchId);
-        if (classificationId.HasValue)
-            query = query.Where(x => db.LeadClassifications.Any(m => m.LeadId == x.Id && m.ClassificationId == classificationId &&
+        var selectedStatuses = (statuses ?? []).Concat(string.IsNullOrWhiteSpace(status) ? [] : new[] { status }).Distinct().ToArray();
+        if (selectedStatuses.Length > 0) query = query.Where(x => selectedStatuses.Contains(x.Status));
+        if (selectedServices.Length > 0 || includeNoService)
+            query = query.Where(x => (x.ServiceId.HasValue && selectedServices.Contains(x.ServiceId.Value)) || (includeNoService && x.ServiceId == null));
+        if (selectedSellers.Length > 0) query = query.Where(x => selectedSellers.Contains(x.CurrentSellerId));
+        if (selectedBranches.Length > 0) query = query.Where(x => selectedBranches.Contains(x.BranchId));
+        if (selectedClassifications.Length > 0)
+            query = query.Where(x => db.LeadClassifications.Any(m => m.LeadId == x.Id && selectedClassifications.Contains(m.ClassificationId) &&
                 db.Classifications.Any(c => c.Id == m.ClassificationId && c.UserId == current.Id)));
         if (createdFrom.HasValue) query = query.Where(x => x.CreatedAt >= createdFrom.Value);
         if (createdTo.HasValue) query = query.Where(x => x.CreatedAt < createdTo.Value);
@@ -72,7 +80,8 @@ public class GroupsController(CrmDbContext db, CurrentUser current) : Controller
     }
     private async Task SetMembers(ContactGroup group, GroupRequest r)
     {
-        var query = FilterLeads(r.Status, r.ServiceId, r.SellerId, r.BranchId, r.CreatedFrom, r.CreatedTo, r.Search, r.ClassificationId);
+        var query = FilterLeads(r.Status, r.ServiceId, r.SellerId, r.BranchId, r.CreatedFrom, r.CreatedTo, r.Search, r.ClassificationId, r.Statuses,
+            r.ServiceIds, r.SellerIds, r.BranchIds, r.ClassificationIds, r.IncludeNoService);
         if (r.LeadIds != null) query = query.Where(x => r.LeadIds.Contains(x.Id));
         var ids = await query.Select(x => x.Id).ToListAsync();
         if (r.LeadIds != null && ids.Count != r.LeadIds.Distinct().Count()) throw new BusinessException("Há leads fora do seu escopo.", 403);
@@ -81,4 +90,5 @@ public class GroupsController(CrmDbContext db, CurrentUser current) : Controller
     }
 }
 public record GroupRequest([Required, MaxLength(160)] string Name, int[]? LeadIds, string? Status, int? ServiceId,
-    int? SellerId = null, int? BranchId = null, DateTime? CreatedFrom = null, DateTime? CreatedTo = null, string? Search = null, int? ClassificationId = null);
+    int? SellerId = null, int? BranchId = null, DateTime? CreatedFrom = null, DateTime? CreatedTo = null, string? Search = null, int? ClassificationId = null,
+    string[]? Statuses = null, int[]? ServiceIds = null, int[]? SellerIds = null, int[]? BranchIds = null, int[]? ClassificationIds = null, bool IncludeNoService = false);
