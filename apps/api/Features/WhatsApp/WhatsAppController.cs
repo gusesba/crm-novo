@@ -123,7 +123,8 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
             throw new BusinessException("Os anexos da sequência devem somar no máximo 16 MB.");
         if (r.IntervalVarianceSeconds > r.IntervalSeconds - 3)
             throw new BusinessException("A variação deve manter o intervalo mínimo em 3 segundos.");
-        var audience = new CampaignAudienceRequest(r.LeadIds, r.GroupId, r.Status, r.ServiceId, r.SellerId, r.BranchId, r.Search, r.ExcludedLeadIds, r.ClassificationId, r.CreatedFrom, r.CreatedTo);
+        var audience = new CampaignAudienceRequest(r.LeadIds, r.GroupId, r.Status, r.ServiceId, r.SellerId, r.BranchId, r.Search, r.ExcludedLeadIds, r.ClassificationId, r.CreatedFrom, r.CreatedTo,
+            r.Statuses, r.ServiceIds, r.SellerIds, r.BranchIds, r.ClassificationIds, r.IncludeNoService);
         var leads = await SelectedCampaignLeads(audience);
         var recipients = leads.Select(x => new { leadId = x.Id, phone = x.Phone, name = x.Name });
         return await client.Send(current.Id, HttpMethod.Post, "campaigns", new { r.Name, r.Messages, r.IntervalSeconds, r.IntervalVarianceSeconds, r.PauseEvery, r.PauseSeconds, recipients });
@@ -133,9 +134,12 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
 
     [HttpGet("campaign-recipients")]
     public async Task<object> CampaignRecipients(int? groupId, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId,
-        string? search, DateTime? createdFrom, DateTime? createdTo, [Range(1, int.MaxValue)] int page = 1, [Range(1, 100)] int pageSize = 20)
+        string? search, DateTime? createdFrom, DateTime? createdTo, [FromQuery] string[]? statuses, [FromQuery] int[]? serviceIds,
+        [FromQuery] int[]? sellerIds, [FromQuery] int[]? branchIds, [FromQuery] int[]? classificationIds, bool includeNoService = false,
+        [Range(1, int.MaxValue)] int page = 1, [Range(1, 100)] int pageSize = 20)
     {
-        var query = await CampaignLeads(new CampaignAudienceRequest(null, groupId, status, serviceId, sellerId, branchId, search, ClassificationId: classificationId, CreatedFrom: createdFrom, CreatedTo: createdTo));
+        var query = await CampaignLeads(new CampaignAudienceRequest(null, groupId, status, serviceId, sellerId, branchId, search, ClassificationId: classificationId, CreatedFrom: createdFrom, CreatedTo: createdTo,
+            Statuses: statuses, ServiceIds: serviceIds, SellerIds: sellerIds, BranchIds: branchIds, ClassificationIds: classificationIds, IncludeNoService: includeNoService));
         return new { items = await query.OrderBy(x => x.Name).ThenBy(x => x.Id).Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(), total = await query.CountAsync(), page, pageSize };
     }
     [HttpPost("campaigns/preview")]
@@ -144,19 +148,25 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
     private async Task<IQueryable<Lead>> CampaignLeads(CampaignAudienceRequest r)
     {
         if (r.CreatedFrom > r.CreatedTo) throw new BusinessException("A data inicial deve ser anterior ou igual à data final.");
-        if (r.SellerId.HasValue && !current.IsAdmin) throw new BusinessException("Filtro de vendedor disponível apenas para administradores.", 403);
-        if (r.BranchId.HasValue && !(current.IsAdmin && current.BranchId == null)) throw new BusinessException("Filtro de sede disponível apenas para o administrador geral.", 403);
+        var statuses = (r.Statuses ?? []).Concat(string.IsNullOrWhiteSpace(r.Status) ? [] : new[] { r.Status }).Distinct().ToArray();
+        var serviceIds = (r.ServiceIds ?? []).Concat(r.ServiceId.HasValue ? [r.ServiceId.Value] : []).Distinct().ToArray();
+        var sellerIds = (r.SellerIds ?? []).Concat(r.SellerId.HasValue ? [r.SellerId.Value] : []).Distinct().ToArray();
+        var branchIds = (r.BranchIds ?? []).Concat(r.BranchId.HasValue ? [r.BranchId.Value] : []).Distinct().ToArray();
+        var classificationIds = (r.ClassificationIds ?? []).Concat(r.ClassificationId.HasValue ? [r.ClassificationId.Value] : []).Distinct().ToArray();
+        if (sellerIds.Length > 0 && !current.IsAdmin) throw new BusinessException("Filtro de vendedor disponível apenas para administradores.", 403);
+        if (branchIds.Length > 0 && !(current.IsAdmin && current.BranchId == null)) throw new BusinessException("Filtro de sede disponível apenas para o administrador geral.", 403);
         var query = current.Scope(db.Leads.AsNoTracking()).Where(x => x.Status != LeadStatuses.OptOut && db.Branches.Any(b => b.Id == x.BranchId && b.Active));
         if (r.CreatedFrom.HasValue) query = query.Where(x => x.CreatedAt >= r.CreatedFrom.Value);
         if (r.CreatedTo.HasValue) query = query.Where(x => x.CreatedAt < r.CreatedTo.Value);
         if (r.LeadIds != null) query = query.Where(x => r.LeadIds.Contains(x.Id));
         if (r.ExcludedLeadIds != null) query = query.Where(x => !r.ExcludedLeadIds.Contains(x.Id));
-        if (!string.IsNullOrWhiteSpace(r.Status)) query = query.Where(x => x.Status == r.Status);
-        if (r.ServiceId.HasValue) query = query.Where(x => x.ServiceId == r.ServiceId);
-        if (r.SellerId.HasValue) query = query.Where(x => x.CurrentSellerId == r.SellerId);
-        if (r.BranchId.HasValue) query = query.Where(x => x.BranchId == r.BranchId);
-        if (r.ClassificationId.HasValue)
-            query = query.Where(x => db.LeadClassifications.Any(m => m.LeadId == x.Id && m.ClassificationId == r.ClassificationId &&
+        if (statuses.Length > 0) query = query.Where(x => statuses.Contains(x.Status));
+        if (serviceIds.Length > 0 || r.IncludeNoService)
+            query = query.Where(x => (x.ServiceId.HasValue && serviceIds.Contains(x.ServiceId.Value)) || (r.IncludeNoService && x.ServiceId == null));
+        if (sellerIds.Length > 0) query = query.Where(x => sellerIds.Contains(x.CurrentSellerId));
+        if (branchIds.Length > 0) query = query.Where(x => branchIds.Contains(x.BranchId));
+        if (classificationIds.Length > 0)
+            query = query.Where(x => db.LeadClassifications.Any(m => m.LeadId == x.Id && classificationIds.Contains(m.ClassificationId) &&
                 db.Classifications.Any(c => c.Id == m.ClassificationId && c.UserId == current.Id)));
         if (!string.IsNullOrWhiteSpace(r.Search))
         {
@@ -214,7 +224,9 @@ public record CampaignRequest([Required, MaxLength(160)] string Name, CampaignMe
     [Range(3, 3600)] int IntervalSeconds = 10, [Range(0, 1800)] int IntervalVarianceSeconds = 3,
     [Range(1, 500)] int PauseEvery = 20, [Range(0, 3600)] int PauseSeconds = 60,
     int? SellerId = null, int? BranchId = null, string? Search = null, int[]? ExcludedLeadIds = null, int? ClassificationId = null,
-    DateTime? CreatedFrom = null, DateTime? CreatedTo = null);
+    DateTime? CreatedFrom = null, DateTime? CreatedTo = null,
+    string[]? Statuses = null, int[]? ServiceIds = null, int[]? SellerIds = null, int[]? BranchIds = null, int[]? ClassificationIds = null, bool IncludeNoService = false);
 public record CampaignAudienceRequest(int[]? LeadIds = null, int? GroupId = null, string? Status = null, int? ServiceId = null,
     int? SellerId = null, int? BranchId = null, string? Search = null, int[]? ExcludedLeadIds = null, int? ClassificationId = null,
-    DateTime? CreatedFrom = null, DateTime? CreatedTo = null);
+    DateTime? CreatedFrom = null, DateTime? CreatedTo = null,
+    string[]? Statuses = null, int[]? ServiceIds = null, int[]? SellerIds = null, int[]? BranchIds = null, int[]? ClassificationIds = null, bool IncludeNoService = false);

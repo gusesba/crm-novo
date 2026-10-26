@@ -19,6 +19,7 @@ import {
 } from "./campaign-message-sequence";
 import { CampaignTracking } from "./campaign-tracking";
 import { Connection } from "./connection";
+import { CampaignAudienceFilter } from "./campaign-audience-filter";
 export function CampaignsPage() {
   const { user, catalog, notify } = useApp();
   const groups = useResource<LeadGroup[]>("/groups");
@@ -34,11 +35,11 @@ export function CampaignsPage() {
   const [excluded, setExcluded] = useState<number[]>([]);
   const [filters, setFilters] = useState({
     search: "",
-    status: "",
-    classificationId: "",
-    serviceId: "",
-    sellerId: "",
-    branchId: "",
+    statuses: ["Agendar Contato", "Stand By"],
+    classificationIds: [] as string[],
+    serviceIds: [] as string[],
+    sellerIds: [] as string[],
+    branchIds: [] as string[],
     groupId: "",
     createdFrom: "",
     createdTo: "",
@@ -50,11 +51,11 @@ export function CampaignsPage() {
   }>();
   const [confirmedIds, setConfirmedIds] = useState<number[]>([]);
   const [trackingRevision, setTrackingRevision] = useState(0);
-  function changeFilter(key: keyof typeof filters, value: string) {
+  function changeFilter<K extends keyof typeof filters>(key: K, value: typeof filters[K]) {
     setFilters((current) => ({
       ...current,
       [key]: value,
-      ...(key === "branchId" ? { sellerId: "" } : {}),
+      ...(key === "branchIds" ? { sellerIds: [] } : {}),
     }));
     setSelected([]);
     setExcluded([]);
@@ -70,18 +71,20 @@ export function CampaignsPage() {
   }
   const audience = {
     groupId: mode === "group" ? Number(filters.groupId) || null : null,
-    status: filters.status || null,
-    classificationId: Number(filters.classificationId) || null,
-    serviceId: Number(filters.serviceId) || null,
-    sellerId: Number(filters.sellerId) || null,
-    branchId: Number(filters.branchId) || null,
+    statuses: filters.statuses,
+    classificationIds: filters.classificationIds.map(Number),
+    serviceIds: filters.serviceIds.filter((id) => id !== "none").map(Number),
+    includeNoService: filters.serviceIds.includes("none"),
+    sellerIds: filters.sellerIds.map(Number),
+    branchIds: filters.branchIds.map(Number),
     search: filters.search || null,
     createdFrom: filters.createdFrom ? new Date(`${filters.createdFrom}T00:00:00`).toISOString() : null,
     createdTo,
   };
   const params = new URLSearchParams({ page: String(page), pageSize: "20" });
   Object.entries(audience).forEach(([key, value]) => {
-    if (value !== null) params.set(key, String(value));
+    if (Array.isArray(value)) value.forEach((item) => params.append(key, String(item)));
+    else if (value !== null) params.set(key, String(value));
   });
   const leads = useResource<PageResult<Lead>>(
     invalidDates || (mode === "group" && !filters.groupId)
@@ -210,86 +213,38 @@ export function CampaignsPage() {
               </Field>
             )}
             <div className="form-grid">
-              <Field label="Status">
-                <select
-                  value={filters.status}
-                  onChange={(e) => changeFilter("status", e.target.value)}
-                >
-                  <option value="">Todos os elegíveis</option>
-                  {statuses
-                    .filter((s) => s !== "Não Enviar Mais")
-                    .map((s) => (
-                      <option key={s}>{s}</option>
-                    ))}
-                </select>
-              </Field>
-              <Field label="Classificação">
-                <select
-                  aria-label="Filtrar classificação"
-                  value={filters.classificationId}
-                  disabled={classifications.loading || !!classifications.error}
-                  onChange={(e) => changeFilter("classificationId", e.target.value)}
-                >
-                  <option value="">
-                    {classifications.loading ? "Carregando classificações…" : "Todas as classificações"}
-                  </option>
-                  {classifications.data?.map((item) => (
-                    <option key={item.id} value={item.id}>{item.name}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Serviço">
-                <select
-                  value={filters.serviceId}
-                  onChange={(e) => changeFilter("serviceId", e.target.value)}
-                >
-                  <option value="">Todos os serviços</option>
-                  {catalog?.services.map((s) => (
-                    <option value={s.id} key={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+              <CampaignAudienceFilter
+                label="Status" emptyLabel="Todos os elegíveis"
+                values={filters.statuses} onChange={(values) => changeFilter("statuses", values)}
+                options={statuses.filter((status) => status !== "Não Enviar Mais").map((status) => ({ value: status, label: status }))}
+              />
+              <CampaignAudienceFilter
+                label="Classificação" emptyLabel={classifications.loading ? "Carregando classificações…" : "Todas as classificações"}
+                values={filters.classificationIds} onChange={(values) => changeFilter("classificationIds", values)}
+                disabled={classifications.loading || !!classifications.error}
+                options={(classifications.data ?? []).map((item) => ({ value: String(item.id), label: item.name }))}
+              />
+              <CampaignAudienceFilter
+                label="Serviço" emptyLabel="Todos os serviços"
+                values={filters.serviceIds} onChange={(values) => changeFilter("serviceIds", values)}
+                options={[{ value: "none", label: "Sem serviço" }, ...(catalog?.services ?? []).map((service) => ({ value: String(service.id), label: service.name }))]}
+              />
               {user?.isAdmin && user.branchId === null && (
-                <Field label="Sede">
-                  <select
-                    value={filters.branchId}
-                    onChange={(e) => changeFilter("branchId", e.target.value)}
-                  >
-                    <option value="">Todas as sedes</option>
-                    {catalog?.branches
-                      .filter((branch) => branch.active)
-                      .map((branch) => (
-                        <option key={branch.id} value={branch.id}>
-                          {branch.name}
-                        </option>
-                      ))}
-                  </select>
-                </Field>
+                <CampaignAudienceFilter
+                  label="Sede" emptyLabel="Todas as sedes"
+                  values={filters.branchIds} onChange={(values) => changeFilter("branchIds", values)}
+                  options={(catalog?.branches ?? []).filter((branch) => branch.active).map((branch) => ({ value: String(branch.id), label: branch.name }))}
+                />
               )}
               {user?.isAdmin && (
-                <Field label="Vendedor">
-                  <select
-                    value={filters.sellerId}
-                    onChange={(e) => changeFilter("sellerId", e.target.value)}
-                  >
-                    <option value="">Todos os vendedores</option>
-                    {catalog?.users
-                      .filter(
-                        (seller) =>
-                          (!user.branchId ||
-                            seller.branchId === user.branchId) &&
-                          (!filters.branchId ||
-                            seller.branchId === Number(filters.branchId)),
-                      )
-                      .map((seller) => (
-                        <option key={seller.id} value={seller.id}>
-                          {seller.name}
-                        </option>
-                      ))}
-                  </select>
-                </Field>
+                <CampaignAudienceFilter
+                  label="Vendedor" emptyLabel="Todos os vendedores"
+                  values={filters.sellerIds} onChange={(values) => changeFilter("sellerIds", values)}
+                  options={(catalog?.users ?? []).filter((seller) =>
+                    (!user.branchId || seller.branchId === user.branchId) &&
+                    (!filters.branchIds.length || seller.branchId === null || filters.branchIds.includes(String(seller.branchId))),
+                  ).map((seller) => ({ value: String(seller.id), label: seller.name }))}
+                />
               )}
               <Field label="Data de cadastro · de">
                 <input

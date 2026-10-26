@@ -186,6 +186,110 @@ public class CampaignAudienceTests
         .Select(item => item.GetProperty("id").GetInt32()).ToArray();
 
     [Fact]
+    public async Task MultipleAudienceFiltersUnionEachFieldAndIntersectAcrossFields()
+    {
+        using var factory = new CampaignFactory();
+        using var admin = await factory.Login();
+        var created = new DateTime(2001, 2, 10, 12, 0, 0, DateTimeKind.Utc);
+        Lead[] leads;
+        int branchId, inactiveBranchId, groupId, firstLabel, secondLabel, foreignLabel;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CrmDbContext>();
+            var branch = new Branch { Name = "Sede múltipla" };
+            var inactive = new Branch { Name = "Sede inativa", Active = false };
+            var labelA = new LeadClassification { UserId = 1, Name = "A", Color = "#112233" };
+            var labelB = new LeadClassification { UserId = 1, Name = "B", Color = "#223344" };
+            var labelForeign = new LeadClassification { UserId = 2, Name = "Privada", Color = "#334455" };
+            db.Branches.AddRange(branch, inactive);
+            db.Classifications.AddRange(labelA, labelB, labelForeign);
+            await db.SaveChangesAsync();
+            branchId = branch.Id; inactiveBranchId = inactive.Id;
+            firstLabel = labelA.Id; secondLabel = labelB.Id; foreignLabel = labelForeign.Id;
+            leads = Enumerable.Range(0, 10).Select(i => new Lead { Name = $"Multiplo {i}", Phone = $"55519886600{i:00}",
+                BranchId = i == 9 ? inactive.Id : i % 2 == 0 ? 1 : branch.Id,
+                SellerId = i % 2 == 0 ? 2 : 1, CurrentSellerId = i % 2 == 0 ? 2 : 1,
+                Status = i == 3 ? LeadStatuses.OptOut : i == 4 ? LeadStatuses.Lost : i % 2 == 0 ? LeadStatuses.Contact : LeadStatuses.Waiting,
+                ServiceId = i == 2 ? null : i == 5 ? 3 : i % 2 == 0 ? 1 : 2,
+                CreatedAt = i == 6 ? created.AddDays(-1) : created }).ToArray();
+            db.Leads.AddRange(leads);
+            await db.SaveChangesAsync();
+            foreach (var (lead, i) in leads.Select((lead, i) => (lead, i)))
+            {
+                db.LeadClassifications.Add(new LeadClassificationMember { LeadId = lead.Id,
+                    ClassificationId = i == 7 ? foreignLabel : i % 2 == 0 ? firstLabel : secondLabel });
+            }
+            db.LeadClassifications.Add(new LeadClassificationMember { LeadId = leads[0].Id, ClassificationId = secondLabel });
+            var group = new ContactGroup { UserId = 1, Name = "Multiplo", Members = leads.Take(8)
+                .Select(lead => new GroupMember { LeadId = lead.Id }).ToList() };
+            db.Groups.Add(group);
+            await db.SaveChangesAsync();
+            groupId = group.Id;
+        }
+        var statuses = new[] { LeadStatuses.Contact, LeadStatuses.Waiting, LeadStatuses.OptOut };
+        var serviceIds = new[] { 1, 2, 1 };
+        var sellerIds = new[] { 1, 2 };
+        var branchIds = new[] { 1, branchId, inactiveBranchId };
+        var classificationIds = new[] { firstLabel, secondLabel, foreignLabel };
+        var query = "search=Multiplo&createdFrom=2001-02-10T03:00:00Z&createdTo=2001-02-11T03:00:00Z&includeNoService=true" +
+            $"&groupId={groupId}" + string.Concat(statuses.Select(x => $"&statuses={Uri.EscapeDataString(x)}")) +
+            string.Concat(serviceIds.Select(x => $"&serviceIds={x}")) + string.Concat(sellerIds.Select(x => $"&sellerIds={x}")) +
+            string.Concat(branchIds.Select(x => $"&branchIds={x}")) + string.Concat(classificationIds.Select(x => $"&classificationIds={x}"));
+        var first = await admin.GetFromJsonAsync<JsonElement>($"/api/whatsapp/campaign-recipients?{query}&pageSize=2");
+        var second = await admin.GetFromJsonAsync<JsonElement>($"/api/whatsapp/campaign-recipients?{query}&pageSize=2&page=2");
+        var expected = leads.Take(3).Select(x => x.Id).ToArray();
+        Assert.Equal(3, first.GetProperty("total").GetInt32());
+        Assert.Equal(expected.Take(2), CampaignIds(first));
+        Assert.Equal(expected.Skip(2), CampaignIds(second));
+        var preview = await admin.PostAsJsonAsync("/api/whatsapp/campaigns/preview", new { statuses, serviceIds, sellerIds, branchIds,
+            classificationIds, includeNoService = true, groupId, search = "Multiplo", createdFrom = created.Date.AddHours(3), createdTo = created.Date.AddDays(1).AddHours(3) });
+        preview.EnsureSuccessStatusCode();
+        Assert.Equal(expected, (await preview.Content.ReadFromJsonAsync<Lead[]>())!.Select(x => x.Id));
+        (await admin.PostAsJsonAsync("/api/whatsapp/campaigns", new { name = "Múltiplos filtros", messages = new[] { new { text = "Teste" } },
+            statuses, serviceIds, sellerIds, branchIds, classificationIds, includeNoService = true, groupId, search = "Multiplo",
+            createdFrom = created.Date.AddHours(3), createdTo = created.Date.AddDays(1).AddHours(3), leadIds = expected })).EnsureSuccessStatusCode();
+        Assert.Equal(expected, Assert.Single(factory.Handler.Recipients));
+        var none = await admin.GetFromJsonAsync<JsonElement>("/api/whatsapp/campaign-recipients?search=Multiplo&includeNoService=true");
+        Assert.Equal(new[] { leads[2].Id }, CampaignIds(none));
+        var withServices = await admin.GetFromJsonAsync<JsonElement>("/api/whatsapp/campaign-recipients?search=Multiplo&serviceIds=1&serviceIds=2");
+        Assert.DoesNotContain(leads[2].Id, CampaignIds(withServices));
+        var legacyUnion = await admin.GetFromJsonAsync<JsonElement>($"/api/whatsapp/campaign-recipients?search=Multiplo&serviceId=1&serviceIds=2&classificationId={firstLabel}&classificationIds={secondLabel}");
+        Assert.Equal(new[] { leads[0].Id, leads[1].Id, leads[4].Id, leads[6].Id, leads[8].Id }, CampaignIds(legacyUnion));
+        var cleared = await admin.GetFromJsonAsync<JsonElement>("/api/whatsapp/campaign-recipients?search=Multiplo");
+        Assert.Equal(8, cleared.GetProperty("total").GetInt32());
+        var privateOnly = await admin.GetFromJsonAsync<JsonElement>($"/api/whatsapp/campaign-recipients?search=Multiplo&classificationIds={foreignLabel}");
+        Assert.Empty(CampaignIds(privateOnly));
+        var excluded = await admin.PostAsJsonAsync("/api/whatsapp/campaigns/preview", new { search = "Multiplo", includeNoService = true, excludedLeadIds = new[] { leads[2].Id } });
+        Assert.Equal(HttpStatusCode.BadRequest, excluded.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await admin.PostAsJsonAsync("/api/whatsapp/campaigns", new { name = "Fora do filtro",
+            messages = new[] { new { text = "Teste" } }, search = "Multiplo", includeNoService = true, leadIds = new[] { leads[0].Id, leads[2].Id } })).StatusCode);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CrmDbContext>();
+            (await db.Leads.FindAsync(leads[2].Id))!.ServiceId = 1;
+            await db.SaveChangesAsync();
+        }
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostAsJsonAsync("/api/whatsapp/campaigns", new { name = "Mudou o serviço",
+            messages = new[] { new { text = "Teste" } }, includeNoService = true, search = "Multiplo", leadIds = new[] { leads[2].Id } })).StatusCode);
+        Assert.Single(factory.Handler.Recipients);
+    }
+
+    [Theory]
+    [InlineData("sellerIds=2&sellerIds=3", true)]
+    [InlineData("branchIds=1&branchIds=2", false)]
+    public async Task MultipleAudienceFiltersPreservePermissionsOnAllEndpoints(string query, bool sellers)
+    {
+        using var factory = new CampaignFactory();
+        using var seller = await factory.Login("camila");
+        Assert.Equal(HttpStatusCode.Forbidden, (await seller.GetAsync($"/api/whatsapp/campaign-recipients?{query}")).StatusCode);
+        var payload = new { name = "Sem permissão", messages = new[] { new { text = "Teste" } },
+            sellerIds = sellers ? new[] { 2, 3 } : null, branchIds = sellers ? null : new[] { 1, 2 } };
+        Assert.Equal(HttpStatusCode.Forbidden, (await seller.PostAsJsonAsync("/api/whatsapp/campaigns/preview", payload)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await seller.PostAsJsonAsync("/api/whatsapp/campaigns", payload)).StatusCode);
+        Assert.Empty(factory.Handler.Recipients);
+    }
+
+    [Fact]
     public async Task ClassificationFilterIsPersonalAndAppliedBeforePagination()
     {
         using var factory = new ApiFactory();
