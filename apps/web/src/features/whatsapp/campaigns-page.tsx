@@ -40,6 +40,8 @@ export function CampaignsPage() {
     sellerId: "",
     branchId: "",
     groupId: "",
+    createdFrom: "",
+    createdTo: "",
   });
   const [page, setPage] = useState(1);
   const [confirmation, setConfirmation] = useState<{
@@ -59,6 +61,13 @@ export function CampaignsPage() {
     setAllSelected(true);
     setPage(1);
   }
+  const invalidDates = !!(filters.createdFrom && filters.createdTo && filters.createdFrom > filters.createdTo);
+  let createdTo: string | null = null;
+  if (filters.createdTo) {
+    const end = new Date(`${filters.createdTo}T00:00:00`);
+    end.setDate(end.getDate() + 1);
+    createdTo = end.toISOString();
+  }
   const audience = {
     groupId: mode === "group" ? Number(filters.groupId) || null : null,
     status: filters.status || null,
@@ -67,17 +76,19 @@ export function CampaignsPage() {
     sellerId: Number(filters.sellerId) || null,
     branchId: Number(filters.branchId) || null,
     search: filters.search || null,
+    createdFrom: filters.createdFrom ? new Date(`${filters.createdFrom}T00:00:00`).toISOString() : null,
+    createdTo,
   };
   const params = new URLSearchParams({ page: String(page), pageSize: "20" });
   Object.entries(audience).forEach(([key, value]) => {
     if (value !== null) params.set(key, String(value));
   });
   const leads = useResource<PageResult<Lead>>(
-    mode === "group" && !filters.groupId
+    invalidDates || (mode === "group" && !filters.groupId)
       ? null
       : `/whatsapp/campaign-recipients?${params}`,
   );
-  const selectionCount = allSelected
+  const selectionCount = invalidDates ? 0 : allSelected
     ? Math.max(0, (leads.data?.total || 0) - excluded.length)
     : selected.length;
   function toggleLead(id: number, checked: boolean) {
@@ -92,6 +103,7 @@ export function CampaignsPage() {
   }
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (invalidDates) return;
     setError("");
     const invalidIndex = messages.findIndex(
       (message) => !message.text.trim() && !message.attachment,
@@ -279,7 +291,24 @@ export function CampaignsPage() {
                   </select>
                 </Field>
               )}
+              <Field label="Data de cadastro · de">
+                <input
+                  type="date"
+                  value={filters.createdFrom}
+                  max={filters.createdTo || undefined}
+                  onChange={(e) => changeFilter("createdFrom", e.target.value)}
+                />
+              </Field>
+              <Field label="Data de cadastro · até">
+                <input
+                  type="date"
+                  value={filters.createdTo}
+                  min={filters.createdFrom || undefined}
+                  onChange={(e) => changeFilter("createdTo", e.target.value)}
+                />
+              </Field>
             </div>
+            {invalidDates && <p className="form-note" role="alert">A data inicial deve ser anterior ou igual à data final.</p>}
             <Field
               label={`Buscar destinatários · ${mode === "group" && !filters.groupId ? 0 : selectionCount} selecionados`}
             >
@@ -298,7 +327,7 @@ export function CampaignsPage() {
             {leads.error && (
               <ErrorBox message={leads.error} retry={leads.reload} />
             )}
-            {(mode !== "group" || filters.groupId) &&
+            {!invalidDates && (mode !== "group" || filters.groupId) &&
               (leads.loading ? (
                 <Loading />
               ) : (
@@ -457,6 +486,7 @@ export function CampaignsPage() {
               className="button primary"
               disabled={
                 busy ||
+                invalidDates ||
                 leads.loading ||
                 selectionCount === 0 ||
                 (mode === "group" && !filters.groupId)

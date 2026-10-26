@@ -44,6 +44,148 @@ public class CampaignAudienceTests
     }
 
     [Fact]
+    public async Task RegistrationPeriodUsesWholeLocalDaysBeforePaginationPreviewAndDispatch()
+    {
+        using var factory = new CampaignFactory();
+        using var seller = await factory.Login("camila");
+        var start = new DateTime(2001, 2, 10, 3, 0, 0, DateTimeKind.Utc);
+        var end = start.AddDays(1);
+        Lead[] leads;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CrmDbContext>();
+            leads = new[] { start.AddTicks(-1), start, start.AddHours(12), end.AddTicks(-1), end }
+                .Select((date, i) => new Lead { Name = $"Periodo {i}", Phone = $"55519887700{i:00}",
+                    BranchId = 1, SellerId = 2, CurrentSellerId = i % 2 == 0 ? 2 : 3, CreatedAt = date }).ToArray();
+            db.Leads.AddRange(leads);
+            await db.SaveChangesAsync();
+        }
+        const string range = "search=Periodo&createdFrom=2001-02-10T03:00:00Z&createdTo=2001-02-11T03:00:00Z";
+        var first = await seller.GetFromJsonAsync<JsonElement>($"/api/whatsapp/campaign-recipients?{range}&pageSize=2");
+        var second = await seller.GetFromJsonAsync<JsonElement>($"/api/whatsapp/campaign-recipients?{range}&pageSize=2&page=2");
+        Assert.Equal(3, first.GetProperty("total").GetInt32());
+        Assert.Equal(3, second.GetProperty("total").GetInt32());
+        Assert.Equal(new[] { leads[1].Id, leads[2].Id }, CampaignIds(first));
+        Assert.Equal(new[] { leads[3].Id }, CampaignIds(second));
+        var preview = await seller.PostAsJsonAsync("/api/whatsapp/campaigns/preview", new { createdFrom = start, createdTo = end });
+        preview.EnsureSuccessStatusCode();
+        var expected = leads.Skip(1).Take(3).Select(x => x.Id).ToArray();
+        Assert.Equal(expected, (await preview.Content.ReadFromJsonAsync<Lead[]>())!.Select(x => x.Id));
+        (await seller.PostAsJsonAsync("/api/whatsapp/campaigns", new { name = "Periodo", messages = new[] { new { text = "Teste" } },
+            search = "Periodo", createdFrom = start, createdTo = end })).EnsureSuccessStatusCode();
+        Assert.Equal(expected, Assert.Single(factory.Handler.Recipients));
+        var unfiltered = await seller.GetFromJsonAsync<JsonElement>("/api/whatsapp/campaign-recipients?search=Periodo");
+        Assert.Equal(5, unfiltered.GetProperty("total").GetInt32());
+        var onlyFrom = await seller.GetFromJsonAsync<JsonElement>("/api/whatsapp/campaign-recipients?search=Periodo&createdFrom=2001-02-11T03:00:00Z");
+        Assert.Equal(new[] { leads[4].Id }, CampaignIds(onlyFrom));
+        var onlyTo = await seller.GetFromJsonAsync<JsonElement>("/api/whatsapp/campaign-recipients?search=Periodo&createdTo=2001-02-10T03:00:00Z");
+        Assert.Equal(new[] { leads[0].Id }, CampaignIds(onlyTo));
+        var empty = await seller.GetFromJsonAsync<JsonElement>("/api/whatsapp/campaign-recipients?createdTo=2000-01-01T00:00:00Z");
+        Assert.Equal(0, empty.GetProperty("total").GetInt32());
+        Assert.Empty(CampaignIds(empty));
+    }
+
+    [Fact]
+    public async Task RegistrationPeriodCombinesWithGroupClassificationAndScope()
+    {
+        using var factory = new CampaignFactory();
+        using var seller = await factory.Login("camila");
+        using var admin = await factory.Login();
+        var start = new DateTime(2001, 2, 10, 3, 0, 0, DateTimeKind.Utc);
+        var end = start.AddDays(1);
+        int groupId, otherLeadId, otherBranchId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CrmDbContext>();
+            foreach (var id in new[] { 1, 2, 8 })
+            {
+                var lead = (await db.Leads.FindAsync(id))!;
+                lead.CreatedAt = start;
+                lead.Name = $"Combinado {id}";
+                lead.ServiceId = 1;
+                if (id != 8) lead.Status = LeadStatuses.Contact;
+            }
+            var branch = new Branch { Name = "Outra sede" };
+            db.Branches.Add(branch);
+            await db.SaveChangesAsync();
+            otherBranchId = branch.Id;
+            var outside = new Lead { Name = "Combinado fora", Phone = "5551988771000", BranchId = branch.Id,
+                SellerId = 1, CurrentSellerId = 1, CreatedAt = start, ServiceId = 1 };
+            db.Leads.Add(outside);
+            await db.SaveChangesAsync();
+            otherLeadId = outside.Id;
+            var group = new ContactGroup { UserId = 2, Name = "Combinado", Members = new[] { 1, 2, 8, otherLeadId }
+                .Select(id => new GroupMember { LeadId = id }).ToList() };
+            db.Groups.Add(group);
+            await db.SaveChangesAsync();
+            groupId = group.Id;
+        }
+        var classificationId = await Classify(seller, 1, 2, 8);
+        var query = $"createdFrom=2001-02-10T03:00:00Z&createdTo=2001-02-11T03:00:00Z&groupId={groupId}&classificationId={classificationId}&status={Uri.EscapeDataString(LeadStatuses.Contact)}&serviceId=1&search=Combinado";
+        var page = await seller.GetFromJsonAsync<JsonElement>($"/api/whatsapp/campaign-recipients?{query}");
+        Assert.Equal(new[] { 1, 2 }, CampaignIds(page));
+        var body = new { createdFrom = start, createdTo = end, groupId, classificationId, status = LeadStatuses.Contact,
+            serviceId = 1, search = "Combinado", excludedLeadIds = new[] { 2 } };
+        var preview = await seller.PostAsJsonAsync("/api/whatsapp/campaigns/preview", body);
+        preview.EnsureSuccessStatusCode();
+        Assert.Equal(1, Assert.Single((await preview.Content.ReadFromJsonAsync<Lead[]>())!).Id);
+        var scoped = await seller.GetFromJsonAsync<JsonElement>("/api/whatsapp/campaign-recipients?createdFrom=2001-02-10T03:00:00Z&createdTo=2001-02-11T03:00:00Z");
+        Assert.Equal(new[] { 1, 2 }, CampaignIds(scoped));
+        var global = await admin.GetFromJsonAsync<JsonElement>($"/api/whatsapp/campaign-recipients?createdFrom=2001-02-10T03:00:00Z&createdTo=2001-02-11T03:00:00Z&branchId={otherBranchId}&sellerId=1");
+        Assert.Equal(new[] { otherLeadId }, CampaignIds(global));
+        Assert.Equal(HttpStatusCode.Forbidden, (await seller.GetAsync($"/api/whatsapp/campaign-recipients?{query}&sellerId=3")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await seller.GetAsync($"/api/whatsapp/campaign-recipients?{query}&branchId={otherBranchId}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task RegistrationPeriodRejectsOutOfRangeManualSelectionAndRevalidatesConfirmation()
+    {
+        using var factory = new CampaignFactory();
+        using var seller = await factory.Login("camila");
+        var start = new DateTime(2001, 2, 10, 3, 0, 0, DateTimeKind.Utc);
+        var end = start.AddDays(1);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CrmDbContext>();
+            foreach (var id in new[] { 1, 2 }) (await db.Leads.FindAsync(id))!.CreatedAt = start;
+            await db.SaveChangesAsync();
+        }
+        var preview = await seller.PostAsJsonAsync("/api/whatsapp/campaigns/preview", new { createdFrom = start, createdTo = end, leadIds = new[] { 1, 2 } });
+        preview.EnsureSuccessStatusCode();
+        Assert.Equal(2, (await preview.Content.ReadFromJsonAsync<Lead[]>())!.Length);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CrmDbContext>();
+            (await db.Leads.FindAsync(2))!.CreatedAt = end;
+            await db.SaveChangesAsync();
+        }
+        Assert.Equal(HttpStatusCode.Conflict, (await seller.PostAsJsonAsync("/api/whatsapp/campaigns/preview", new {
+            createdFrom = start, createdTo = end, leadIds = new[] { 1, 2 } })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await seller.PostAsJsonAsync("/api/whatsapp/campaigns", new {
+            name = "Periodo", messages = new[] { new { text = "Teste" } }, createdFrom = start, createdTo = end, leadIds = new[] { 1, 2 } })).StatusCode);
+        Assert.Empty(factory.Handler.Recipients);
+    }
+
+    [Theory]
+    [InlineData("invalid", null)]
+    [InlineData(null, "2001-02-30T00:00:00Z")]
+    [InlineData("2001-02-11T03:00:00Z", "2001-02-10T03:00:00Z")]
+    public async Task InvalidRegistrationPeriodIsRejectedEverywhere(string? createdFrom, string? createdTo)
+    {
+        using var factory = new CampaignFactory();
+        using var seller = await factory.Login("camila");
+        var query = $"createdFrom={Uri.EscapeDataString(createdFrom ?? "")}&createdTo={Uri.EscapeDataString(createdTo ?? "")}";
+        Assert.Equal(HttpStatusCode.BadRequest, (await seller.GetAsync($"/api/whatsapp/campaign-recipients?{query}")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await seller.PostAsJsonAsync("/api/whatsapp/campaigns/preview", new { createdFrom, createdTo })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await seller.PostAsJsonAsync("/api/whatsapp/campaigns", new { name = "Invalido",
+            messages = new[] { new { text = "Teste" } }, createdFrom, createdTo })).StatusCode);
+        Assert.Empty(factory.Handler.Recipients);
+    }
+
+    private static int[] CampaignIds(JsonElement result) => result.GetProperty("items").EnumerateArray()
+        .Select(item => item.GetProperty("id").GetInt32()).ToArray();
+
+    [Fact]
     public async Task ClassificationFilterIsPersonalAndAppliedBeforePagination()
     {
         using var factory = new ApiFactory();
