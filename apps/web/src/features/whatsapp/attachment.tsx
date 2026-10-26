@@ -1,6 +1,7 @@
 "use client";
 import type { Attachment } from "@/lib/types";
 import { Paperclip, X } from "lucide-react";
+import type { ClipboardEvent } from "react";
 export function AttachmentPicker({
   value,
   onChange,
@@ -59,4 +60,19 @@ export function readAttachment(
     });
   reader.onerror = () => onError("Não foi possível ler o arquivo.");
   reader.readAsDataURL(file);
+}
+
+export function pasteAttachment(
+  event: ClipboardEvent<HTMLElement>,
+  onChange: (file: Attachment) => void,
+  onError: (message: string) => void,
+) {
+  const files = Array.from(event.clipboardData.files);
+  if (!files.length) return;
+  event.preventDefault();
+  if (files.length > 1) {
+    onError("Cole um arquivo por mensagem. Para enviar mais arquivos, use mensagens separadas.");
+    return;
+  }
+  readAttachment(files[0], onChange, onError);
 }

@@ -9,7 +9,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { AttachmentPicker } from "./attachment";
+import { AttachmentPicker, pasteAttachment } from "./attachment";
 import { FormattedMessage } from "./formatted-message";
 
 export interface CampaignMessageDraft {
@@ -28,13 +28,14 @@ export function CampaignMessageSequence({
   onError: (message: string) => void;
 }) {
   const textareas = useRef(new Map<string, HTMLTextAreaElement>());
+  const latestMessages = useRef(messages);
+  latestMessages.current = messages;
 
   function update(id: string, values: Partial<CampaignMessageDraft>) {
-    onChange(
-      messages.map((message) =>
-        message.id === id ? { ...message, ...values } : message,
-      ),
+    latestMessages.current = latestMessages.current.map((message) =>
+      message.id === id ? { ...message, ...values } : message,
     );
+    onChange(latestMessages.current);
   }
 
   function insertToken(message: CampaignMessageDraft, token: string) {
@@ -75,7 +76,8 @@ export function CampaignMessageSequence({
   }
 
   function updateAttachment(id: string, attachment?: Attachment) {
-    const encodedSize = messages.reduce(
+    if (!latestMessages.current.some((message) => message.id === id)) return;
+    const encodedSize = latestMessages.current.reduce(
       (total, message) =>
         total +
         (message.id === id
@@ -105,7 +107,11 @@ export function CampaignMessageSequence({
       </div>
       <div className="campaign-message-list">
         {messages.map((message, index) => (
-          <div className="campaign-message-editor" key={message.id}>
+          <div
+            className="campaign-message-editor"
+            key={message.id}
+            onPaste={(event) => pasteAttachment(event, (attachment) => updateAttachment(message.id, attachment), onError)}
+          >
             <div className="campaign-message-editor-heading">
               <strong>Mensagem {index + 1}</strong>
               <div>

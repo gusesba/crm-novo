@@ -8,6 +8,7 @@ import { ComposerAttachmentMenu } from "./composer-attachment-menu";
 import { ComposerEmojiPicker } from "./composer-emoji-picker";
 import { ContactPicker } from "./contact-picker";
 import { VoiceRecorder } from "./voice-recorder";
+import { pasteAttachment } from "./attachment";
 export function MessageComposer({
   chatId,
   chats,
@@ -32,6 +33,11 @@ export function MessageComposer({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const textarea = useRef<HTMLTextAreaElement>(null);
+  function selectAttachment(file: Attachment) {
+    setAttachment(file);
+    setContact(undefined);
+    if (file.mime === "image/webp" && !file.asDocument) setText("");
+  }
   function insertEmoji(emoji: string) {
     const input = textarea.current;
     if (!input) return;
@@ -73,7 +79,14 @@ export function MessageComposer({
   }
   return (
     <>
-      <form className="composer" onSubmit={send}>
+      <form
+        className="composer"
+        onSubmit={send}
+        onPaste={(event) => {
+          if (!editing && !busy && !recording)
+            pasteAttachment(event, selectAttachment, setError);
+        }}
+      >
         {error && <ErrorBox message={error} />}{" "}
         {(reply || editing) && (
           <div className="reply-banner">
@@ -133,6 +146,13 @@ export function MessageComposer({
                 alt="Prévia da figurinha selecionada"
               />
             )}
+            {attachment?.mime.startsWith("image/") && !isSticker && !attachment.asDocument && (
+              <img
+                className="composer-sticker-preview"
+                src={`data:${attachment.mime};base64,${attachment.data}`}
+                alt={`Prévia de ${attachment.name}`}
+              />
+            )}
           </div>
         )}
         <div className="composer-input">
@@ -141,11 +161,7 @@ export function MessageComposer({
               disabled={busy || recording}
               onError={setError}
               onContact={() => setChoosingContact(true)}
-              onFile={(file) => {
-                setAttachment(file);
-                setContact(undefined);
-                if (file.mime === "image/webp" && !file.asDocument) setText("");
-              }}
+              onFile={selectAttachment}
             />
           )}
           <ComposerEmojiPicker
