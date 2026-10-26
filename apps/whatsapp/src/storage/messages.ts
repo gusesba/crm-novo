@@ -74,7 +74,10 @@ export function saveMessage(user: string, msg: WAMessage) {
   const name = conversationName(user, jid) || jid;
   const saved = db.prepare(
     `INSERT INTO messages VALUES(?,?,?,?,?,?,?,?)
-    ON CONFLICT(user_id,id) DO UPDATE SET text=excluded.text,kind=excluded.kind,raw=excluded.raw WHERE messages.kind != 'deleted'`,
+    ON CONFLICT(user_id,id) DO UPDATE SET text=excluded.text,kind=excluded.kind,
+      raw=CASE WHEN messages.mine=0 AND json_extract(messages.raw,'$.status')>=${proto.WebMessageInfo.Status.READ}
+        THEN json_set(excluded.raw,'$.status',json_extract(messages.raw,'$.status')) ELSE excluded.raw END
+    WHERE messages.kind != 'deleted'`,
   ).run(
     user,
     msg.key.id,

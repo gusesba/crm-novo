@@ -4,7 +4,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { proto, type WASocket } from "@whiskeysockets/baileys";
+import { initAuthCreds, makeEventBuffer, proto, type AuthenticationState, type WASocket } from "@whiskeysockets/baileys";
+import pino from "pino";
 
 const directory = mkdtempSync(join(tmpdir(), "via-unread-test-"));
 process.env.DATA_DIR = directory;
@@ -17,6 +18,7 @@ const { listChats, saveChatState, chatUnreadState } = await import("../src/stora
 const { saveMessage, markMessageDeleted } = await import("../src/storage/messages.js");
 const { readChat } = await import("../src/messaging/read-chat.js");
 const { readChatSchema } = await import("../src/messaging/schemas.js");
+const { syncReadEvents } = await import("../src/sessions/read-sync.js");
 after(() => { db.close(); rmSync(directory, { recursive: true }); });
 
 const chat = "5551999999999@s.whatsapp.net";
@@ -35,6 +37,119 @@ function socket() {
   } satisfies Pick<WASocket, "readMessages" | "chatModify">;
   return { calls, fake };
 }
+
+function remoteReads(user: string) {
+  const ev = makeEventBuffer(pino({ level: "silent" }));
+  const state: AuthenticationState = {
+    creds: { ...initAuthCreds(), me: { id: "5551888888888:2@s.whatsapp.net", lid: "999000:2@lid" } },
+    keys: { get: async () => ({}), set: async () => {} },
+  };
+  ev.on("messages.upsert", (event) => {
+    for (const message of event.messages) saveMessage(user, message);
+  });
+  ev.on("chats.update", (chats) => {
+    for (const chat of chats) saveChatState(user, chat, "delta");
+  });
+  syncReadEvents(user, { ev }, state);
+  return {
+    ev,
+    read: (id: string, chatId = chat, fromMe = false) => ev.emit("messages.update", [{
+      key: { id, remoteJid: chatId, fromMe },
+      update: { status: proto.WebMessageInfo.Status.READ, messageTimestamp: 9999 },
+    }]),
+  };
+}
+
+test("leitura no celular limpa contador pelo recibo sem precisar abrir no CRM", () => {
+  const user = "remote-read";
+  message(user, "first", chat, false, 90);
+  message(user, "last");
+  saveChatState(user, { id: chat, unreadCount: 2, archived: true, pinned: 33 });
+  remoteReads(user).read("last");
+  const row = listChats(user)[0] as { unreadCount: number; archived: number; pinnedAt: number };
+  assert.equal(row.unreadCount, 0);
+  assert.equal(row.archived, 1);
+  assert.equal(row.pinnedAt, 33);
+  const stored = db.prepare("SELECT timestamp,raw FROM messages WHERE user_id=? AND id='last'").get(user)!;
+  assert.equal(stored.timestamp, 100000);
+  assert.equal(JSON.parse(stored.raw as string).messageTimestamp, 100);
+  assert.equal(JSON.parse(stored.raw as string).status, proto.WebMessageInfo.Status.READ);
+});
+
+test("recibo atrasado preserva recebidas posteriores inclusive no mesmo segundo e ignora envios próprios", () => {
+  const user = "remote-newer";
+  message(user, "older");
+  message(user, "same-second");
+  message(user, "newer", chat, false, 101);
+  message(user, "outgoing", chat, true, 102);
+  saveChatState(user, { id: chat, unreadCount: 3 });
+  const remote = remoteReads(user);
+  remote.read("older");
+  assert.equal(chatUnreadState(user, chat)?.unreadCount, 2);
+  remote.read("same-second");
+  assert.equal(chatUnreadState(user, chat)?.unreadCount, 1);
+  remote.read("newer");
+  assert.equal(chatUnreadState(user, chat)?.unreadCount, 0);
+});
+
+test("recibos repetidos e ressincronização do conteúdo não apagam uma nova contagem ou marcador manual", () => {
+  const user = "remote-replay";
+  message(user);
+  saveChatState(user, { id: chat, unreadCount: 1 });
+  const remote = remoteReads(user);
+  remote.read("last");
+  saveChatState(user, { id: chat, unreadCount: -1 });
+  remote.read("last");
+  assert.equal(chatUnreadState(user, chat)?.unreadCount, -1);
+  message(user);
+  message(user, "new", chat, false, 101);
+  saveChatState(user, { id: chat, unreadCount: 1 }, "delta");
+  const version = chatUnreadState(user, chat)?.version;
+  remote.read("last");
+  assert.equal(chatUnreadState(user, chat)?.unreadCount, 1);
+  assert.equal(chatUnreadState(user, chat)?.version, version);
+});
+
+test("entrega, leitura pelo destinatário, sessão alheia, chat errado e mensagem ausente não limpam contador", () => {
+  const user = "remote-isolation";
+  message(user);
+  message(user, "own", chat, true);
+  saveChatState(user, { id: chat, unreadCount: 5 });
+  const remote = remoteReads(user);
+  remote.ev.emit("messages.update", [{ key: { id: "last", remoteJid: chat, fromMe: false }, update: { status: proto.WebMessageInfo.Status.DELIVERY_ACK } }]);
+  remote.read("own", chat, true);
+  remote.read("own");
+  remote.read("last", "other@s.whatsapp.net");
+  remote.read("missing");
+  remoteReads("another-session").read("last");
+  assert.equal(chatUnreadState(user, chat)?.unreadCount, 5);
+});
+
+test("recibo por LID reconhece a conversa salva pelo telefone", () => {
+  const user = "remote-lid";
+  const lid = "123456789@lid";
+  saveMessage(user, { key: { id: "lid", remoteJid: lid, remoteJidAlt: chat, fromMe: false }, messageTimestamp: 100, message: { conversation: "Olá" } });
+  saveChatState(user, { id: chat, unreadCount: 1 });
+  remoteReads(user).read("lid", lid);
+  assert.equal(chatUnreadState(user, chat)?.unreadCount, 0);
+});
+
+test("recibos de grupo só reconciliam leitura da própria conta por telefone ou LID", () => {
+  for (const own of ["5551888888888@s.whatsapp.net", "999000@lid"]) {
+    const user = `remote-group-${own}`;
+    const group = "123456789@g.us";
+    message(user, "group", group);
+    markMessageDeleted(user, "group", group);
+    saveChatState(user, { id: group, unreadCount: 1 });
+    const { ev } = remoteReads(user);
+    const key = { id: "group", remoteJid: group, fromMe: true };
+    ev.emit("message-receipt.update", [{ key, receipt: { userJid: chat, readTimestamp: 200 } }]);
+    ev.emit("message-receipt.update", [{ key, receipt: { userJid: own, receiptTimestamp: 200 } }]);
+    assert.equal(chatUnreadState(user, group)?.unreadCount, 1);
+    ev.emit("message-receipt.update", [{ key, receipt: { userJid: own, readTimestamp: 200 } }]);
+    assert.equal(chatUnreadState(user, group)?.unreadCount, 0);
+  }
+});
 
 test("migração preserva estados existentes e começa sem inferir não lidas do histórico", () => {
   const state = db.prepare("SELECT * FROM chat_states WHERE user_id='legacy'").get()!;

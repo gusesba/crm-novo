@@ -1,8 +1,10 @@
 import type {
   AuthenticationState,
   ChatUpdate,
+  WAMessageKey,
   WASocket,
 } from "@whiskeysockets/baileys";
+import { proto } from "@whiskeysockets/baileys";
 import { db } from "./database.js";
 
 let lastUnreadUpdate = 0;
@@ -93,6 +95,35 @@ export function clearChatUnread(user: string, chatId: string, version: number) {
   db.prepare(
     "UPDATE chat_states SET unread_count=0,unread_updated_at=MAX(unread_updated_at+1,?) WHERE user_id=? AND id=? AND unread_updated_at=?",
   ).run(unreadUpdateTime(), user, canonicalChatId(user, chatId), version);
+}
+
+export function syncMessageRead(user: string, key: WAMessageKey) {
+  if (!key.id || !key.remoteJid || key.fromMe !== false) return;
+  const message = db.prepare(
+    "SELECT rowid,chat_id AS chatId,timestamp,raw FROM messages WHERE user_id=? AND id=? AND mine=0",
+  ).get(user, key.id) as { rowid: number; chatId: string; timestamp: number; raw: string } | undefined;
+  if (!message) return;
+  const raw = JSON.parse(message.raw);
+  const chatId = canonicalChatId(user, message.chatId);
+  if (canonicalChatId(user, key.remoteJid) !== chatId && raw.key?.remoteJid !== key.remoteJid) return;
+  const read = proto.WebMessageInfo.Status.READ;
+  if (raw.status >= read) return;
+
+  const chatIds = JSON.stringify([...new Set([message.chatId, chatId, key.remoteJid])]);
+  // O recibo confirma a leitura até esta mensagem, sem usar a hora do recibo como hora do conteúdo.
+  db.prepare(
+    `UPDATE messages SET raw=json_set(raw,'$.status',?)
+     WHERE user_id=? AND mine=0 AND chat_id IN (SELECT value FROM json_each(?))
+       AND (timestamp<? OR (timestamp=? AND rowid<=?)) AND COALESCE(json_extract(raw,'$.status'),0)<?`,
+  ).run(read, user, chatIds, message.timestamp, message.timestamp, message.rowid, read);
+  const newer = db.prepare(
+    `SELECT COUNT(*) AS count FROM messages
+     WHERE user_id=? AND mine=0 AND chat_id IN (SELECT value FROM json_each(?))
+       AND (timestamp>? OR (timestamp=? AND rowid>?)) AND COALESCE(json_extract(raw,'$.status'),0)<?`,
+  ).get(user, chatIds, message.timestamp, message.timestamp, message.rowid, read) as { count: number };
+  const current = chatUnreadState(user, chatId);
+  if (current && current.unreadCount > newer.count)
+    saveChatState(user, { id: chatId, unreadCount: newer.count });
 }
 
 export function listChats(user: string) {
