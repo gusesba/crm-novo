@@ -23,7 +23,7 @@ import { TransferModal } from "./transfer-modal";
 export function LeadsPage({
   mode = "all",
 }: {
-  mode?: "all" | "mine" | "sales";
+  mode?: "all" | "mine" | "sales" | "transferred";
 }) {
   const { user, catalog, notify } = useApp();
   const searchParams = useSearchParams();
@@ -32,6 +32,7 @@ export function LeadsPage({
   const [status, setStatus] = useState("");
   const [service, setService] = useState("");
   const [seller, setSeller] = useState("");
+  const [originalSeller, setOriginalSeller] = useState("");
   const [branch, setBranch] = useState("");
   const [classification, setClassification] = useState("");
   const [sort, setSort] = useState("created_desc");
@@ -61,11 +62,13 @@ export function LeadsPage({
     pageSize: "10",
     mine: String(mode === "mine"),
     sales: String(mode === "sales"),
+    transferred: String(mode === "transferred"),
     sort,
   });
   if (status) query.set("status", status);
   if (service) query.set("serviceId", service);
   if (seller) query.set("sellerId", seller);
+  if (mode === "transferred" && originalSeller) query.set("originalSellerId", originalSeller);
   if (branch) query.set("branchId", branch);
   if (classification) query.set("classificationId", classification);
   if (startDate)
@@ -96,7 +99,7 @@ export function LeadsPage({
   }
   useEffect(() => {
     setSelected([]);
-  }, [page, debounced, status, service, seller, branch, classification, startDate, endDate, sort]);
+  }, [page, debounced, status, service, seller, originalSeller, branch, classification, startDate, endDate, sort]);
   const deepLink = searchParams.get("lead");
   useEffect(() => {
     if (deepLink)
@@ -115,7 +118,9 @@ export function LeadsPage({
                 ? "Meus leads"
                 : mode === "sales"
                   ? "Matrículas realizadas"
-                  : "Carteira de leads"}
+                  : mode === "transferred"
+                    ? "Transferidos"
+                    : "Carteira de leads"}
             </h2>
             <span className="count-pill">{invalidDates ? 0 : result.data?.total || 0}</span>
           </div>
@@ -229,22 +234,43 @@ export function LeadsPage({
                 </option>
               ))}
             </select>
+            {mode === "transferred" && user?.isAdmin && (
+              <label className="leads-date-filter">
+                <span>Original</span>
+                <select
+                  aria-label="Filtrar vendedor original"
+                  value={originalSeller}
+                  onChange={(e) => {
+                    setOriginalSeller(e.target.value);
+                    setPage(1);
+                  }}
+                >
+                  <option value="">Todos os vendedores originais</option>
+                  {catalog?.users.map((u) => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
             {mode !== "mine" && (
-              <select
-                aria-label="Filtrar vendedor"
-                value={seller}
-                onChange={(e) => {
-                  setSeller(e.target.value);
-                  setPage(1);
-                }}
-              >
-                <option value="">Todos os vendedores</option>
-                {catalog?.users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
+              <label className={mode === "transferred" ? "leads-date-filter" : undefined}>
+                {mode === "transferred" && <span>Atual</span>}
+                <select
+                  aria-label={mode === "transferred" ? "Filtrar vendedor atual" : "Filtrar vendedor"}
+                  value={seller}
+                  onChange={(e) => {
+                    setSeller(e.target.value);
+                    setPage(1);
+                  }}
+                >
+                  <option value="">{mode === "transferred" ? "Todos os vendedores atuais" : "Todos os vendedores"}</option>
+                  {catalog?.users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
             )}
             {!user?.branchId && (
               <select
@@ -278,7 +304,12 @@ export function LeadsPage({
         ) : result.loading ? (
           <Loading />
         ) : !result.data?.items.length ? (
-          <Empty />
+          mode === "transferred" ? (
+            <Empty
+              title="Nenhum lead transferido"
+              description="Não há leads do vendedor original em atendimento por outro vendedor com estes filtros."
+            />
+          ) : <Empty />
         ) : (
           <LeadsTable
             items={result.data.items}
@@ -292,6 +323,7 @@ export function LeadsPage({
               setSort(value);
               setPage(1);
             }}
+            showOriginalSeller={mode === "transferred"}
           />
         )}
         <div className="table-pagination">
@@ -346,6 +378,7 @@ export function LeadsPage({
       {transfer && (
         <TransferModal
           ids={selected}
+          sourceBranchIds={Array.from(new Set(result.data?.items.filter((lead) => selected.includes(lead.id)).map((lead) => lead.branchId)))}
           onClose={() => setTransfer(false)}
           onSaved={() => {
             setTransfer(false);

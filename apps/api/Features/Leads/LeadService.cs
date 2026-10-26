@@ -29,7 +29,7 @@ public class LeadService(CrmDbContext db, CurrentUser current)
             lead = await Find(id.Value);
             current.EnsureEdit(lead);
             if (lead.Revision != r.Revision) throw new BusinessException("O lead foi alterado por outro usuário. Atualize a página.", 409);
-            if (lead.BranchId != r.BranchId || lead.SellerId != r.SellerId) throw new BusinessException("Use a transferência para alterar o vendedor. A sede do cadastro não pode ser alterada.");
+            if (lead.BranchId != r.BranchId || lead.SellerId != r.SellerId) throw new BusinessException("Use a transferência permanente para alterar o vendedor original ou a sede.");
             if (!current.IsAdmin && (lead.Name != r.Name.Trim() || lead.Phone != phone ||
                 (lead.AdditionalPhone ?? "") != (r.AdditionalPhone ?? "") || (lead.Email ?? "") != (r.Email ?? "") ||
                 lead.Gender != r.Gender || lead.BirthDate != r.BirthDate))
@@ -64,9 +64,21 @@ public class LeadService(CrmDbContext db, CurrentUser current)
         if (request.LeadIds.Length is 0 or > 500) throw new BusinessException("Selecione entre 1 e 500 leads.");
         var leads = await current.Scope(db.Leads).Where(x => request.LeadIds.Contains(x.Id)).ToListAsync();
         if (leads.Count != request.LeadIds.Distinct().Count()) throw new BusinessException("Há leads fora do seu escopo.", 403);
+        if (request.BranchId.HasValue)
+        {
+            if (!current.IsAdmin || current.BranchId.HasValue) throw new BusinessException("Somente o administrador global pode transferir leads entre sedes.", 403);
+            if (!request.Permanent) throw new BusinessException("A transferência entre sedes deve ser permanente.");
+            if (!await db.Branches.AnyAsync(x => x.Id == request.BranchId && x.Active)) throw new BusinessException("Sede inativa ou inexistente.");
+            var phones = leads.Select(x => x.Phone).ToArray();
+            if (phones.Distinct().Count() != phones.Length || await db.Leads.AnyAsync(x => x.BranchId == request.BranchId
+                && phones.Contains(x.Phone) && !request.LeadIds.Contains(x.Id)))
+                throw new BusinessException("Há leads com o mesmo telefone na sede de destino.", 409);
+        }
+        foreach (var lead in leads)
+            await ValidateSeller(request.SellerId, request.BranchId ?? lead.BranchId);
         foreach (var lead in leads)
         {
-            await ValidateSeller(request.SellerId, lead.BranchId);
+            if (request.BranchId.HasValue) lead.BranchId = request.BranchId.Value;
             LeadRules.Transfer(lead, request.SellerId, request.Permanent);
         }
         await db.SaveChangesAsync();

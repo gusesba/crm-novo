@@ -26,5 +26,5 @@ public class LeadRequest
     [MaxLength(2000)] public string? ReturnNote { get; set; }
     public int Revision { get; set; }
 }
-public record TransferRequest(int[] LeadIds, int SellerId, bool Permanent);
+public record TransferRequest(int[] LeadIds, int SellerId, bool Permanent, [Range(1, int.MaxValue)] int? BranchId = null);
 public record LinkRequest(string ChatId);

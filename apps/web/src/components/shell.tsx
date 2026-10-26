@@ -1,5 +1,6 @@
 "use client";
 import {
+  ArrowLeftRight,
   ArrowUpRight,
   Building2,
   CalendarDays,
@@ -31,6 +32,7 @@ const navigation = [
     admin: true,
   },
   { label: "Meus leads", href: "/my-leads", icon: ContactRound },
+  { label: "Transferidos", href: "/transferred-leads", icon: ArrowLeftRight },
   { label: "Todos os leads", href: "/leads", icon: UsersRound },
   { label: "Vendas", href: "/sales", icon: ChartNoAxesCombined },
   { label: "Agendamentos", href: "/appointments", icon: CalendarDays },

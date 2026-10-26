@@ -11,9 +11,9 @@ namespace Crm.Api.Features.Leads;
 public class LeadsController(CrmDbContext db, CurrentUser current, LeadService service, WhatsAppClient whatsapp) : ControllerBase
 {
     [HttpGet]
-    public async Task<object> List(string? search, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId, DateTime? createdFrom, DateTime? createdTo, string? sort, bool mine = false, bool sales = false, int page = 1, int pageSize = 20)
+    public async Task<object> List(string? search, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId, DateTime? createdFrom, DateTime? createdTo, string? sort, int? originalSellerId, bool mine = false, bool sales = false, bool transferred = false, int page = 1, int pageSize = 20)
     {
-        var query = Filter(search, status, serviceId, sellerId, branchId, classificationId, createdFrom, createdTo, mine, sales);
+        var query = Filter(search, status, serviceId, sellerId, branchId, classificationId, createdFrom, createdTo, mine, sales, transferred, originalSellerId);
         var personalClassifications = from member in db.LeadClassifications.AsNoTracking()
                                       join classification in db.Classifications.AsNoTracking() on member.ClassificationId equals classification.Id
                                       where classification.UserId == current.Id
@@ -33,17 +33,25 @@ public class LeadsController(CrmDbContext db, CurrentUser current, LeadService s
         return new { items, total = await query.CountAsync(), page, pageSize };
     }
     [HttpGet("export")]
-    public async Task<IActionResult> Export(string? search, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId, DateTime? createdFrom, DateTime? createdTo, string? sort, bool mine = false, bool sales = false, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> Export(string? search, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId, DateTime? createdFrom, DateTime? createdTo, string? sort, int? originalSellerId, bool mine = false, bool sales = false, bool transferred = false, CancellationToken cancellationToken = default)
     {
-        var query = Filter(search, status, serviceId, sellerId, branchId, classificationId, createdFrom, createdTo, mine, sales);
+        var query = Filter(search, status, serviceId, sellerId, branchId, classificationId, createdFrom, createdTo, mine, sales, transferred, originalSellerId);
         var data = await LeadExcelExport.Create(LeadOrdering.Apply(query, sort), db, current.Id, sales, cancellationToken);
         return File(data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", sales ? "vendas.xlsx" : "leads.xlsx");
     }
 
-    private IQueryable<Lead> Filter(string? search, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId, DateTime? createdFrom, DateTime? createdTo, bool mine, bool sales)
+    private IQueryable<Lead> Filter(string? search, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId, DateTime? createdFrom, DateTime? createdTo, bool mine, bool sales, bool transferred, int? originalSellerId)
     {
         if (createdFrom > createdTo) throw new BusinessException("A data inicial deve ser anterior ou igual à data final.");
+        if (originalSellerId.HasValue && !current.IsAdmin && originalSellerId != current.Id)
+            throw new BusinessException("Somente administradores podem filtrar por outro vendedor original.", 403);
         var query = current.Scope(db.Leads.AsNoTracking());
+        if (transferred)
+        {
+            query = query.Where(x => x.SellerId != x.CurrentSellerId);
+            if (!current.IsAdmin) query = query.Where(x => x.SellerId == current.Id);
+        }
+        if (originalSellerId.HasValue) query = query.Where(x => x.SellerId == originalSellerId);
         if (createdFrom.HasValue) query = query.Where(x => x.CreatedAt >= createdFrom.Value);
         if (createdTo.HasValue) query = query.Where(x => x.CreatedAt < createdTo.Value);
         if (!string.IsNullOrWhiteSpace(search))

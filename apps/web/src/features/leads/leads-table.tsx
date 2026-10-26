@@ -14,6 +14,7 @@ export function LeadsTable({
   setEditing,
   sort,
   onSort,
+  showOriginalSeller = false,
 }: {
   items: Lead[];
   user: User | null;
@@ -23,6 +24,7 @@ export function LeadsTable({
   setEditing: (lead: Lead) => void;
   sort: string;
   onSort: (sort: string) => void;
+  showOriginalSeller?: boolean;
 }) {
   function sortHeader(label: string, field: "name" | "value" | "created") {
     const active = sort.startsWith(`${field}_`);
@@ -64,6 +66,7 @@ export function LeadsTable({
             <th>SERVIÇO / ORIGEM</th>
             <th>STATUS</th>
             <th>CLASSIFICAÇÕES</th>
+            {showOriginalSeller && <th>VENDEDOR ORIGINAL</th>}
             <th>VENDEDOR ATUAL</th>
             {sortHeader("VALOR", "value")}
             {sortHeader("ENTRADA", "created")}
@@ -129,6 +132,14 @@ export function LeadsTable({
                   </div>
                 ) : <span className="muted" aria-label="Sem classificação">—</span>}
               </td>
+              {showOriginalSeller && (
+                <td>
+                  <div className="person-cell">
+                    <Avatar small name={catalog?.users.find((u) => u.id === l.sellerId)?.name || "Vendedor"} />
+                    <span>{catalog?.users.find((u) => u.id === l.sellerId)?.name || "—"}</span>
+                  </div>
+                </td>
+              )}
               <td>
                 <div className="person-cell">
                   <Avatar
@@ -139,7 +150,7 @@ export function LeadsTable({
                     }
                   />
                   <span>
-                    {catalog?.users
+                    {showOriginalSeller ? catalog?.users.find((u) => u.id === l.currentSellerId)?.name || "—" : catalog?.users
                       .find((u) => u.id === l.currentSellerId)
                       ?.name.split(" ")[0] || "—"}
                   </span>
