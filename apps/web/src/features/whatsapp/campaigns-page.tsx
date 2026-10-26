@@ -12,7 +12,7 @@ import { post } from "@/lib/api";
 import { statuses } from "@/lib/format";
 import type { LeadGroup, Lead, LeadClassification, PageResult } from "@/lib/types";
 import { Radio, Send } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   CampaignMessageSequence,
   type CampaignMessageDraft,
@@ -21,6 +21,7 @@ import { CampaignTracking } from "./campaign-tracking";
 import { Connection } from "./connection";
 import { CampaignAudienceFilter } from "./campaign-audience-filter";
 import { messageAttachments } from "./attachment";
+import { defaultCampaignTiming, loadCampaignTiming, saveCampaignTiming, type CampaignTiming } from "./campaign-timing";
 export function CampaignsPage() {
   const { user, catalog, notify } = useApp();
   const groups = useResource<LeadGroup[]>("/groups");
@@ -30,6 +31,18 @@ export function CampaignsPage() {
   ]);
   const [busy, setBusy] = useState(false);
   const [readingFiles, setReadingFiles] = useState(0);
+  const [timing, setTiming] = useState<Record<keyof CampaignTiming, number | string>>(defaultCampaignTiming);
+  const [timingLoaded, setTimingLoaded] = useState(false);
+  const [timingSaved, setTimingSaved] = useState(false);
+  useEffect(() => {
+    setTiming(loadCampaignTiming());
+    setTimingLoaded(true);
+  }, []);
+  useEffect(() => {
+    if (!timingLoaded) return;
+    const values = Object.fromEntries(Object.entries(timing).map(([key, value]) => [key, value === "" ? NaN : Number(value)]));
+    setTimingSaved(saveCampaignTiming(values));
+  }, [timing, timingLoaded]);
   const [error, setError] = useState("");
   const [mode, setMode] = useState("all");
   const [allSelected, setAllSelected] = useState(true);
@@ -401,7 +414,8 @@ export function CampaignsPage() {
                   type="number"
                   min={3}
                   max={3600}
-                  defaultValue={10}
+                  value={timing.intervalSeconds}
+                  onChange={(event) => setTiming((current) => ({ ...current, intervalSeconds: event.target.value }))}
                   required
                 />
               </Field>
@@ -411,7 +425,8 @@ export function CampaignsPage() {
                   type="number"
                   min={0}
                   max={1800}
-                  defaultValue={3}
+                  value={timing.intervalVarianceSeconds}
+                  onChange={(event) => setTiming((current) => ({ ...current, intervalVarianceSeconds: event.target.value }))}
                   required
                 />
               </Field>
@@ -421,7 +436,8 @@ export function CampaignsPage() {
                   type="number"
                   min={1}
                   max={500}
-                  defaultValue={20}
+                  value={timing.pauseEvery}
+                  onChange={(event) => setTiming((current) => ({ ...current, pauseEvery: event.target.value }))}
                   required
                 />
               </Field>
@@ -431,11 +447,13 @@ export function CampaignsPage() {
                   type="number"
                   min={0}
                   max={3600}
-                  defaultValue={60}
+                  value={timing.pauseSeconds}
+                  onChange={(event) => setTiming((current) => ({ ...current, pauseSeconds: event.target.value }))}
                   required
                 />
               </Field>
             </div>
+            {timingSaved && <p className="form-note">Configurações de intervalo e pausa salvas neste navegador.</p>}
             <p className="form-note campaign-interval-note">
               Exemplo: intervalo 10 e variação 3 espera aleatoriamente entre 7 e
               13 segundos depois de cada mensagem.
