@@ -43,7 +43,14 @@ export async function deliver(
         try {
           lastResult = await dependencies.send(
             recipient,
-            message,
+            {
+              ...message,
+              text: message.text?.replace(/\$\{PrimeiroNome\}|\$\{nome\}|\{\{nome\}\}/g, (token) =>
+                token === "${PrimeiroNome}"
+                  ? recipient.name.trim().split(/\s+/)[0]
+                  : recipient.name,
+              ),
+            },
             messageIndex,
           );
         } catch (error) {

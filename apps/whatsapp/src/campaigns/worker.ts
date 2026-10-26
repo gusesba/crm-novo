@@ -141,7 +141,7 @@ async function run(
         const send = (chatId: string) =>
           sendMessage(user, {
             chatId,
-            text: message.text?.replaceAll("{{nome}}", recipient.name),
+            text: message.text,
             attachment: message.attachment,
           });
         const destination = destinations.get(recipient.leadId);

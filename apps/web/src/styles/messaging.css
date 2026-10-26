@@ -1203,6 +1203,23 @@
 .campaign-message-editor .file-label {
   padding-bottom: 0;
 }
+.campaign-personalization {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.campaign-personalization button {
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--green);
+  font-size: 10px;
+}
 .campaign-message-editor .attachment-tag {
   margin-bottom: 0;
 }

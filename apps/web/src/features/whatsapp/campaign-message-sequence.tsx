@@ -1,5 +1,6 @@
 "use client";
 import type { Attachment } from "@/lib/types";
+import { useRef } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -25,12 +26,32 @@ export function CampaignMessageSequence({
   onChange: (messages: CampaignMessageDraft[]) => void;
   onError: (message: string) => void;
 }) {
+  const textareas = useRef(new Map<string, HTMLTextAreaElement>());
+
   function update(id: string, values: Partial<CampaignMessageDraft>) {
     onChange(
       messages.map((message) =>
         message.id === id ? { ...message, ...values } : message,
       ),
     );
+  }
+
+  function insertToken(message: CampaignMessageDraft, token: string) {
+    const textarea = textareas.current.get(message.id);
+    if (!textarea || textarea.disabled) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = message.text.slice(0, start) + token + message.text.slice(end);
+    if (text.length > 10000) {
+      onError("O texto da mensagem deve ter no máximo 10.000 caracteres.");
+      return;
+    }
+    update(message.id, { text });
+    requestAnimationFrame(() => {
+      if (!textarea.isConnected) return;
+      textarea.focus();
+      textarea.setSelectionRange(start + token.length, start + token.length);
+    });
   }
 
   function move(index: number, offset: number) {
@@ -77,6 +98,7 @@ export function CampaignMessageSequence({
         <div>
           <strong>Sequência de mensagens</strong>
           <p>Envie até 10 mensagens na ordem abaixo.</p>
+          <p>Use <code>{"${PrimeiroNome}"}</code> para o primeiro nome ou <code>{"${nome}"}</code> para o nome completo. <code>{"{{nome}}"}</code> também continua válido.</p>
         </div>
         <span>{messages.length}/10</span>
       </div>
@@ -118,6 +140,10 @@ export function CampaignMessageSequence({
               </div>
             </div>
             <textarea
+              ref={(element) => {
+                if (element) textareas.current.set(message.id, element);
+                else textareas.current.delete(message.id);
+              }}
               aria-label={`Texto da mensagem ${index + 1}`}
               rows={3}
               maxLength={10000}
@@ -130,10 +156,28 @@ export function CampaignMessageSequence({
                 message.attachment?.mime === "image/webp"
                   ? "Figurinhas são enviadas sem texto"
                   : index === 0
-                    ? "Olá, {{nome}}!"
+                    ? "Olá, ${PrimeiroNome}!"
                     : "Continue a conversa com a próxima informação…"
               }
             />
+            <div className="campaign-personalization" role="group" aria-label={`Personalizar mensagem ${index + 1}`}>
+              <span>Inserir:</span>
+              {[
+                { token: "${PrimeiroNome}", label: "primeiro nome" },
+                { token: "${nome}", label: "nome completo" },
+              ].map(({ token, label }) => (
+                <button
+                  key={token}
+                  type="button"
+                  disabled={message.attachment?.mime === "image/webp"}
+                  aria-label={`Inserir ${label} na mensagem ${index + 1}`}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => insertToken(message, token)}
+                >
+                  {token}
+                </button>
+              ))}
+            </div>
             <AttachmentPicker
               value={message.attachment}
               onChange={(attachment) =>
@@ -188,7 +232,7 @@ function CampaignPreview({ messages }: { messages: CampaignMessageDraft[] }) {
               {message.text.trim() &&
                 message.attachment?.mime !== "image/webp" && (
                   <p>
-                    {message.text.replaceAll("{{nome}}", "Mariana Almeida")}
+                    {message.text.replaceAll("${PrimeiroNome}", "Mariana").replaceAll("${nome}", "Mariana Almeida").replaceAll("{{nome}}", "Mariana Almeida")}
                   </p>
                 )}
               <small>agora</small>

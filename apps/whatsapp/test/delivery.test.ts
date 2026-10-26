@@ -98,3 +98,55 @@ test("cancelar envio já iniciado contabiliza conclusão e bloqueia os próximos
   await assert.rejects(deliver(input, controller.signal, f.dependencies));
   assert.deepEqual(f.counts, []);
 });
+
+test("personaliza todas as mensagens e legendas por destinatário sem alterar o modelo salvo", async () => {
+  const campaign: CampaignInput = {
+    ...input,
+    messages: [
+      { text: "Olá, ${PrimeiroNome}! ${PrimeiroNome}, confira: ${nome} / {{nome}} / ${nome}." },
+      { text: "Para ${PrimeiroNome}", attachment: { name: "foto.jpg", mime: "image/jpeg", data: "YWJj" } },
+    ],
+    recipients: [
+      { ...input.recipients[0], name: "  João\t da Silva  " },
+      { ...input.recipients[1], name: "Ana" },
+    ],
+  };
+  const original = structuredClone(campaign);
+  const sent: CampaignInput["messages"][number][] = [];
+  const f = fixture({ send: async (_recipient, message) => { sent.push(message); } });
+  await deliver(campaign, new AbortController().signal, f.dependencies);
+  assert.deepEqual(sent.map((message) => message.text), [
+    "Olá, João! João, confira:   João\t da Silva   /   João\t da Silva   /   João\t da Silva  .",
+    "Para João",
+    "Olá, Ana! Ana, confira: Ana / Ana / Ana.",
+    "Para Ana",
+  ]);
+  assert.deepEqual(sent[1].attachment, campaign.messages[1].attachment);
+  assert.deepEqual(sent[3].attachment, campaign.messages[1].attachment);
+  assert.deepEqual(campaign, original);
+});
+
+test("substituição é literal, não executa expressões nem reinterpreta tokens presentes no nome", async () => {
+  const sent: (string | null | undefined)[] = [];
+  const f = fixture({ send: async (_recipient, message) => { sent.push(message.text); } });
+  await deliver({
+    ...input,
+    recipients: [{ ...input.recipients[0], name: "$& ${PrimeiroNome}" }],
+    messages: [{ text: "${PrimeiroNome} / {{nome}} / ${nome} / ${Outro} / ${1+1}" }],
+  }, new AbortController().signal, f.dependencies);
+  assert.deepEqual(sent, ["$& / $& ${PrimeiroNome} / $& ${PrimeiroNome} / ${Outro} / ${1+1}"]);
+});
+
+test("mensagens somente com anexo e nomes vazios não quebram a personalização", async () => {
+  const sent: (string | null | undefined)[] = [];
+  const f = fixture({ send: async (_recipient, message) => { sent.push(message.text); } });
+  await deliver({
+    ...input,
+    recipients: [{ ...input.recipients[0], name: "   " }],
+    messages: [
+      { text: "Olá ${PrimeiroNome}!" },
+      { attachment: { name: "foto.jpg", mime: "image/jpeg", data: "YWJj" } },
+    ],
+  }, new AbortController().signal, f.dependencies);
+  assert.deepEqual(sent, ["Olá !", undefined]);
+});
