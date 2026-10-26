@@ -22,6 +22,7 @@ import {
   Square,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { FormattedMessage } from "./formatted-message";
 
 const campaignLabels: Record<string, string> = {
   running: "Em andamento",
@@ -204,7 +205,7 @@ function CampaignPreparedMessages({ campaignId }: { campaignId: string }) {
               {message.attachment && (
                 <CampaignAttachmentPreview attachment={message.attachment} />
               )}
-              {message.text && <p>{message.text}</p>}
+              {message.text && <p><FormattedMessage text={message.text} /></p>}
             </div>
           </div>
         ))

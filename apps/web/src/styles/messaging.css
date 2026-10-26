@@ -408,6 +408,15 @@
   overflow-wrap: anywhere;
   color: #53674c;
 }
+.message-code {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.95em;
+  background: #243c320d;
+  border-radius: 4px;
+  padding: 1px 4px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .message.contact-message {
   width: 333px;
   flex-shrink: 0;

@@ -10,6 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { AttachmentPicker } from "./attachment";
+import { FormattedMessage } from "./formatted-message";
 
 export interface CampaignMessageDraft {
   id: string;
@@ -232,7 +233,7 @@ function CampaignPreview({ messages }: { messages: CampaignMessageDraft[] }) {
               {message.text.trim() &&
                 message.attachment?.mime !== "image/webp" && (
                   <p>
-                    {message.text.replaceAll("${PrimeiroNome}", "Mariana").replaceAll("${nome}", "Mariana Almeida").replaceAll("{{nome}}", "Mariana Almeida")}
+                    <FormattedMessage text={message.text.replaceAll("${PrimeiroNome}", "Mariana").replaceAll("${nome}", "Mariana Almeida").replaceAll("{{nome}}", "Mariana Almeida")} />
                   </p>
                 )}
               <small>agora</small>

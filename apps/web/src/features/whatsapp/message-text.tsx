@@ -5,6 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { messagePhones } from "@/lib/message-phones";
 import type { SharedContact } from "@/lib/types";
+import { FormattedMessage } from "./formatted-message";
 
 export function MessageText({ text, onStartConversation, onError }: {
   text: string;
@@ -15,7 +16,6 @@ export function MessageText({ text, onStartConversation, onError }: {
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const menu = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
-  const phones = messagePhones(text);
 
   useEffect(() => {
     if (!selected) return;
@@ -51,32 +51,36 @@ export function MessageText({ text, onStartConversation, onError }: {
     });
   }, [selected]);
 
-  const parts = [];
-  let cursor = 0;
-  for (const phone of phones) {
-    parts.push(text.slice(cursor, phone.start));
-    parts.push(
-      <button
-        key={phone.start}
-        type="button"
-        className="message-phone"
-        aria-label={`Ações para o telefone ${phone.text}`}
-        aria-haspopup="menu"
-        aria-expanded={selected?.phone === phone.phone}
-        onClick={(event) => {
-          const bounds = event.currentTarget.getBoundingClientRect();
-          trigger.current = event.currentTarget;
-          setSelected(selected?.phone === phone.phone ? undefined : { phone: phone.phone, top: bounds.bottom + 6, left: bounds.left });
-        }}
-      >{phone.text}</button>,
-    );
-    cursor = phone.start + phone.text.length;
+  function renderText(value: string) {
+    const phones = messagePhones(value);
+    const parts = [];
+    let cursor = 0;
+    for (const phone of phones) {
+      parts.push(value.slice(cursor, phone.start));
+      parts.push(
+        <button
+          key={phone.start}
+          type="button"
+          className="message-phone"
+          aria-label={`Ações para o telefone ${phone.text}`}
+          aria-haspopup="menu"
+          aria-expanded={selected?.phone === phone.phone}
+          onClick={(event) => {
+            const bounds = event.currentTarget.getBoundingClientRect();
+            trigger.current = event.currentTarget;
+            setSelected(selected?.phone === phone.phone ? undefined : { phone: phone.phone, top: bounds.bottom + 6, left: bounds.left });
+          }}
+        >{phone.text}</button>,
+      );
+      cursor = phone.start + phone.text.length;
+    }
+    parts.push(value.slice(cursor));
+    return parts;
   }
-  parts.push(text.slice(cursor));
 
   return (
     <div className="message-text">
-      {parts}
+      <FormattedMessage text={text} renderText={renderText} />
       {selected && createPortal(
         <div ref={menu} role="menu" aria-label="Ações do telefone" className="message-menu-popover message-phone-popover" style={position}>
           {onStartConversation && (
