@@ -6,6 +6,7 @@ import {
 } from "@whiskeysockets/baileys";
 import { db } from "./database.js";
 import { conversationName, savePushName } from "./contacts.js";
+import { messageReply } from "./message-replies.js";
 
 export function saveMessage(user: string, msg: WAMessage) {
   const jid = messageChatId(msg);
@@ -201,6 +202,7 @@ export function listMessages(
           : message.text,
       attachment,
       contact,
+      reply: message.kind !== "deleted" ? messageReply(user, chatId, raw) : undefined,
       reactions: reactions
         .filter((reaction) => reaction.messageId === message.id)
         .map(({ emoji, mine }) => ({ emoji, mine: !!mine })),

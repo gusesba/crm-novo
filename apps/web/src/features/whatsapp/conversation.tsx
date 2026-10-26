@@ -12,6 +12,7 @@ import { MessageActionsMenu } from "./message-actions-menu";
 import { MessageAttachment } from "./message-attachment";
 import { DeleteMessageModal } from "./delete-message-modal";
 import { MessageText } from "./message-text";
+import { MessageReply } from "./message-reply";
 export function Conversation({
   chatId,
   userId,
@@ -68,6 +69,7 @@ export function Conversation({
       .finally(() => setReading(false));
   }, [backup, chatId, lastMessageId, unreadCount, markedUnread, reading, readError, result.loading, result.error, onRead, visibilityRevision]);
   const end = useRef<HTMLDivElement>(null);
+  const messageElements = useRef(new Map<string, HTMLDivElement>());
   useEffect(() => {
     end.current?.scrollIntoView({ block: "nearest" });
   }, [result.data?.length]);
@@ -151,7 +153,10 @@ export function Conversation({
           />
         ) : (
           messages.map((m) => (
-            <div className={`message ${m.mine ? "mine" : ""} ${m.contact ? "contact-message" : ""}`} key={m.id}>
+            <div className={`message ${m.mine ? "mine" : ""} ${m.contact ? "contact-message" : ""}`} key={m.id} ref={(element) => {
+              if (element) messageElements.current.set(m.id, element);
+              else messageElements.current.delete(m.id);
+            }}>
               {!backup && chatId.endsWith("@s.whatsapp.net") && (
                 <MessageActionsMenu
                   message={m}
@@ -166,6 +171,16 @@ export function Conversation({
                   onReact={(emoji) => react(m, emoji)}
                   onForward={() => setForwarding(m)}
                   onDelete={() => setDeleting(m)}
+                />
+              )}
+              {m.reply && m.kind !== "deleted" && (
+                <MessageReply
+                  reply={messages.some((message) => message.id === m.reply!.id && message.kind === "deleted")
+                    ? { ...m.reply, kind: "deleted", text: "Mensagem apagada", thumbnail: undefined }
+                    : m.reply}
+                  onNavigate={messages.some((message) => message.id === m.reply!.id) ? () => {
+                    messageElements.current.get(m.reply!.id)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  } : undefined}
                 />
               )}
               {m.kind === "deleted" && (

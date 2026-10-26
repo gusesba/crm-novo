@@ -372,6 +372,69 @@
   border-color: #d9e5d3;
   border-radius: 12px 0 12px 12px;
 }
+.message-reply {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+  margin: 0 0 7px;
+  padding: 7px 9px;
+  border: 0;
+  border-left: 3px solid #008069;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.035);
+  color: #59675d;
+  font: inherit;
+  text-align: left;
+}
+.message.mine .message-reply {
+  background: rgba(0, 0, 0, 0.055);
+}
+button.message-reply {
+  cursor: pointer;
+}
+button.message-reply:focus-visible {
+  outline: 2px solid #008069;
+  outline-offset: 2px;
+}
+.message-reply-content {
+  flex: 1;
+  min-width: 0;
+}
+.message-reply-content > strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #008069;
+  font-size: 12px;
+  margin-bottom: 3px;
+}
+.message-reply-text {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.message-reply-text > svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.message-reply-text > span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.message-reply > img {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: 3px;
+}
 .message-deleted {
   display: flex;
   align-items: center;

@@ -115,6 +115,14 @@ export interface Message {
   };
   contact?: { name: string; phone: string };
   reactions: { emoji: string; mine: boolean }[];
+  reply?: {
+    id: string;
+    author: string;
+    mine: boolean;
+    text: string;
+    kind: string;
+    thumbnail?: string;
+  };
 }
 export interface Attachment {
   name: string;
