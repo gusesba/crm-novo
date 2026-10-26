@@ -1,7 +1,7 @@
 "use client";
 import { Avatar, Empty, ErrorBox, Loading } from "@/components/ui";
 import { useResource } from "@/hooks/use-resource";
-import { api, post } from "@/lib/api";
+import { api, post, put } from "@/lib/api";
 import { date, time } from "@/lib/format";
 import type { Chat, Message, SharedContact } from "@/lib/types";
 import { Ban } from "lucide-react";
@@ -18,12 +18,14 @@ export function Conversation({
   backup,
   chats,
   onStartConversation,
+  onRead,
 }: {
   chatId: string;
   userId?: string;
   backup: boolean;
   chats: Chat[];
   onStartConversation: (contact: SharedContact) => void;
+  onRead: () => void;
 }) {
   const path = `/whatsapp/messages?chatId=${encodeURIComponent(chatId)}${userId ? `&userId=${userId}` : ""}`;
   const result = useResource<Message[]>(path, backup ? undefined : 4000);
@@ -34,6 +36,37 @@ export function Conversation({
   const [deleting, setDeleting] = useState<Message>();
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [reading, setReading] = useState(false);
+  const [readError, setReadError] = useState("");
+  const [visibilityRevision, setVisibilityRevision] = useState(0);
+  const lastReadAttempt = useRef("");
+  const unreadCount = chats.find((chat) => chat.id === chatId)?.unreadCount || 0;
+  const markedUnread = chats.find((chat) => chat.id === chatId)?.markedUnread || false;
+  const lastMessageId = result.data?.at(-1)?.id;
+  useEffect(() => {
+    const refreshVisibility = () => setVisibilityRevision((value) => value + 1);
+    window.addEventListener("focus", refreshVisibility);
+    document.addEventListener("visibilitychange", refreshVisibility);
+    return () => {
+      window.removeEventListener("focus", refreshVisibility);
+      document.removeEventListener("visibilitychange", refreshVisibility);
+    };
+  }, []);
+  useEffect(() => {
+    if (backup || reading || readError || result.loading || result.error || !lastMessageId ||
+        document.visibilityState !== "visible" || !document.hasFocus()) return;
+    const attempt = `${chatId}:${lastMessageId}:${unreadCount}:${markedUnread}`;
+    if (lastReadAttempt.current === attempt) return;
+    lastReadAttempt.current = attempt;
+    setReading(true);
+    void put<{ unreadCount: number; markedUnread?: boolean }>("/whatsapp/chats/read", { chatId, lastMessageId })
+      .then((result) => {
+        lastReadAttempt.current = `${chatId}:${lastMessageId}:${result.unreadCount}:${!!result.markedUnread}`;
+        onRead();
+      })
+      .catch((e) => setReadError((e as Error).message))
+      .finally(() => setReading(false));
+  }, [backup, chatId, lastMessageId, unreadCount, markedUnread, reading, readError, result.loading, result.error, onRead, visibilityRevision]);
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => {
     end.current?.scrollIntoView({ block: "nearest" });
@@ -94,6 +127,10 @@ export function Conversation({
   return (
     <>
       {(error || result.error) && <ErrorBox message={error || result.error} />}
+      {readError && <ErrorBox message={readError} retry={() => {
+        lastReadAttempt.current = "";
+        setReadError("");
+      }} />}
       {notice && <p className="form-note">{notice}</p>}
       <div className="message-list">
         {messages.length >= 100 && (

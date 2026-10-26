@@ -92,6 +92,8 @@ export interface Chat {
   updatedAt: number;
   archived: boolean;
   pinnedAt: number;
+  unreadCount?: number;
+  markedUnread?: boolean;
   leadId?: number | null;
   leadStatus?: string | null;
   classifications?: LeadClassification[];

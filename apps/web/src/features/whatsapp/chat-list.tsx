@@ -20,9 +20,10 @@ type ItemProps = Omit<Props, "chats" | "search" | "views"> & { chat: Chat };
 
 function ChatItem({ chat, selected, pictureUrl, onSelect, onOpenPhoto }: ItemProps) {
   const name = chat.name.includes("@") ? chat.name.split("@")[0] : chat.name;
+  const unreadCount = chat.unreadCount || 0;
   return (
     <div
-      className={`chat-item ${selected === chat.id ? "active" : ""}`}
+      className={`chat-item ${selected === chat.id ? "active" : ""} ${unreadCount > 0 || chat.markedUnread ? "unread" : ""}`}
     >
       <button
         type="button"
@@ -49,6 +50,12 @@ function ChatItem({ chat, selected, pictureUrl, onSelect, onOpenPhoto }: ItemPro
         <span className="chat-item-meta">
           {chat.pinnedAt > 0 && <Pin size={11} aria-label="Conversa fixada" />}
           <small>{date(chat.updatedAt)}</small>
+          {unreadCount > 0 && (
+            <span className="chat-unread-count" aria-label={`${unreadCount} ${unreadCount === 1 ? "mensagem não lida" : "mensagens não lidas"}`}>
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          )}
+          {unreadCount <= 0 && chat.markedUnread && <span className="chat-unread-count marked" aria-label="Conversa marcada como não lida" />}
         </span>
       </button>
     </div>

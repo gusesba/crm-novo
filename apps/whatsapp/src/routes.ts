@@ -10,6 +10,7 @@ import {
   deleteSchema,
   forwardSchema,
   reactionSchema,
+  readChatSchema,
   sendSchema,
 } from "./messaging/schemas.js";
 import {
@@ -22,6 +23,7 @@ import {
 } from "./messaging/send.js";
 import { profilePicture } from "./messaging/profile-picture.js";
 import { archiveChat } from "./messaging/archive-chat.js";
+import { readChat } from "./messaging/read-chat.js";
 import { listChats } from "./storage/chat-states.js";
 import {
   campaignDeliveries,
@@ -51,6 +53,10 @@ export async function registerRoutes(app: FastifyInstance) {
   app.put("/sessions/:user/chats/archive", async (req) => {
     const { chatId, archived } = archiveChatSchema.parse(req.body);
     return archiveChat(params.parse(req.params).user, chatId, archived);
+  });
+  app.put("/sessions/:user/chats/read", async (req) => {
+    const { chatId, lastMessageId } = readChatSchema.parse(req.body);
+    return readChat(params.parse(req.params).user, chatId, lastMessageId);
   });
   app.post("/sessions/:user/resolve-phone", async (req) => {
     const { phone } = z.object({ phone: z.string().regex(/^\d{10,15}$/) }).parse(req.body);

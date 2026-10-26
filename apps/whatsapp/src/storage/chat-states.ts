@@ -5,6 +5,12 @@ import type {
 } from "@whiskeysockets/baileys";
 import { db } from "./database.js";
 
+let lastUnreadUpdate = 0;
+function unreadUpdateTime() {
+  lastUnreadUpdate = Math.max(Date.now(), lastUnreadUpdate + 1);
+  return lastUnreadUpdate;
+}
+
 function canonicalChatId(user: string, id: string) {
   if (!id.endsWith("@lid")) return id;
   const lid = id.slice(0, id.indexOf("@")).split(":")[0];
@@ -25,18 +31,20 @@ function canonicalChatId(user: string, id: string) {
 function normalizeChatStates(user: string) {
   const states = db
     .prepare(
-      "SELECT id,archived,pinned_at AS pinnedAt FROM chat_states WHERE user_id=? AND id LIKE '%@lid'",
+      "SELECT id,archived,pinned_at AS pinnedAt,unread_count AS unreadCount,unread_updated_at AS unreadUpdatedAt FROM chat_states WHERE user_id=? AND id LIKE '%@lid'",
     )
-    .all(user) as { id: string; archived: number; pinnedAt: number }[];
+    .all(user) as { id: string; archived: number; pinnedAt: number; unreadCount: number; unreadUpdatedAt: number }[];
   for (const state of states) {
     const id = canonicalChatId(user, state.id);
     if (id === state.id) continue;
     db.prepare(
-      `INSERT INTO chat_states VALUES(?,?,?,?)
+      `INSERT INTO chat_states(user_id,id,archived,pinned_at,unread_count,unread_updated_at) VALUES(?,?,?,?,?,?)
        ON CONFLICT(user_id,id) DO UPDATE SET
          archived=MAX(chat_states.archived,excluded.archived),
-         pinned_at=MAX(chat_states.pinned_at,excluded.pinned_at)`,
-    ).run(user, id, state.archived, state.pinnedAt);
+         pinned_at=MAX(chat_states.pinned_at,excluded.pinned_at),
+         unread_count=CASE WHEN excluded.unread_updated_at > chat_states.unread_updated_at THEN excluded.unread_count ELSE chat_states.unread_count END,
+         unread_updated_at=MAX(chat_states.unread_updated_at,excluded.unread_updated_at)`,
+    ).run(user, id, state.archived, state.pinnedAt, state.unreadCount, state.unreadUpdatedAt);
     db.prepare("DELETE FROM chat_states WHERE user_id=? AND id=?").run(
       user,
       state.id,
@@ -46,11 +54,12 @@ function normalizeChatStates(user: string) {
 
 export function saveChatState(
   user: string,
-  chat: Pick<ChatUpdate, "id" | "archived" | "pinned">,
+  chat: Pick<ChatUpdate, "id" | "archived" | "pinned" | "unreadCount">,
+  unreadMode: "snapshot" | "delta" = "snapshot",
 ) {
   if (!chat.id) return;
   const id = canonicalChatId(user, chat.id);
-  db.prepare("INSERT OR IGNORE INTO chat_states VALUES(?,?,0,0)").run(user, id);
+  db.prepare("INSERT OR IGNORE INTO chat_states(user_id,id) VALUES(?,?)").run(user, id);
   if (typeof chat.archived === "boolean")
     db.prepare(
       "UPDATE chat_states SET archived=? WHERE user_id=? AND id=?",
@@ -59,6 +68,31 @@ export function saveChatState(
     db.prepare(
       "UPDATE chat_states SET pinned_at=? WHERE user_id=? AND id=?",
     ).run(Number(chat.pinned || 0), user, id);
+  if (Object.hasOwn(chat, "unreadCount") && typeof chat.unreadCount === "number" &&
+      Number.isSafeInteger(chat.unreadCount) && chat.unreadCount >= -1) {
+    const count = chat.unreadCount;
+    db.prepare(
+      `UPDATE chat_states SET unread_count=CASE
+         WHEN ?=-1 THEN CASE WHEN unread_count>0 THEN unread_count ELSE -1 END
+         WHEN ?=0 THEN 0
+         WHEN ?='delta' THEN MAX(unread_count,0)+?
+         ELSE ? END, unread_updated_at=MAX(unread_updated_at+1,?)
+       WHERE user_id=? AND id=?`,
+    ).run(count, count, unreadMode, count, count, unreadUpdateTime(), user, id);
+  }
+}
+
+export function chatUnreadState(user: string, chatId: string) {
+  normalizeChatStates(user);
+  return db.prepare(
+    "SELECT unread_count AS unreadCount,unread_updated_at AS version FROM chat_states WHERE user_id=? AND id=?",
+  ).get(user, canonicalChatId(user, chatId)) as { unreadCount: number; version: number } | undefined;
+}
+
+export function clearChatUnread(user: string, chatId: string, version: number) {
+  db.prepare(
+    "UPDATE chat_states SET unread_count=0,unread_updated_at=MAX(unread_updated_at+1,?) WHERE user_id=? AND id=? AND unread_updated_at=?",
+  ).run(unreadUpdateTime(), user, canonicalChatId(user, chatId), version);
 }
 
 export function listChats(user: string) {
@@ -79,7 +113,9 @@ export function listChats(user: string) {
                   AND json_type(m.raw,'$.message.stickerMessage') IS NOT NULL
               ) THEN 'Figurinha' ELSE c.last_text END AS lastText,
               c.updated_at AS updatedAt,
-              COALESCE(s.archived,0) AS archived,COALESCE(s.pinned_at,0) AS pinnedAt
+              COALESCE(s.archived,0) AS archived,COALESCE(s.pinned_at,0) AS pinnedAt,
+              MAX(COALESCE(s.unread_count,0),0) AS unreadCount,
+              COALESCE(s.unread_count,0)<0 AS markedUnread
        FROM chats c LEFT JOIN chat_states s ON s.user_id=c.user_id AND s.id=c.id
        WHERE c.user_id=? AND (COALESCE(s.archived,0)=1 OR c.id IN active)
        ORDER BY COALESCE(s.archived,0) ASC,
@@ -98,7 +134,7 @@ export async function backfillChatStates(
     .prepare(
       `SELECT
          (SELECT COUNT(*) FROM chats WHERE user_id=?) AS chats,
-         (SELECT COUNT(*) FROM service_state WHERE user_id=? AND key='chat-state-snapshot-v3') AS completed`,
+         (SELECT COUNT(*) FROM service_state WHERE user_id=? AND key='chat-state-snapshot-v4') AS completed`,
     )
     .get(user, user) as { chats: number; completed: number };
   if (!status.chats || status.completed) return;
@@ -109,7 +145,7 @@ export async function backfillChatStates(
   await socket.resyncAppState(["regular_low"], false);
   db.prepare("INSERT OR REPLACE INTO service_state VALUES(?,?,?)").run(
     user,
-    "chat-state-snapshot-v3",
+    "chat-state-snapshot-v4",
     new Date().toISOString(),
   );
 }

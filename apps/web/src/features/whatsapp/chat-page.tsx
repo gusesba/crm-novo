@@ -299,6 +299,7 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
               backup={backup}
               chats={chats.data || []}
               onStartConversation={(contact) => void startConversation(contact)}
+              onRead={chats.reload}
             />
           </div>
         ) : (

@@ -133,7 +133,7 @@ export async function connect(user: string) {
     for (const chat of chats) saveChatState(user, chat);
   });
   socket.ev.on("chats.update", (chats) => {
-    for (const chat of chats) saveChatState(user, chat);
+    for (const chat of chats) saveChatState(user, chat, "delta");
   });
   socket.ev.on("contacts.upsert", (contacts) => {
     for (const contact of contacts) saveContact(user, contact);

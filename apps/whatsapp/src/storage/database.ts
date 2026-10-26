@@ -33,6 +33,11 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS campaign_deliveries_status ON campaign_deliveries(campaign_id,status,position);
 `);
+const chatStateColumns = db.prepare("PRAGMA table_info(chat_states)").all() as { name: string }[];
+if (!chatStateColumns.some((column) => column.name === "unread_count"))
+  db.exec("ALTER TABLE chat_states ADD COLUMN unread_count INTEGER NOT NULL DEFAULT 0");
+if (!chatStateColumns.some((column) => column.name === "unread_updated_at"))
+  db.exec("ALTER TABLE chat_states ADD COLUMN unread_updated_at INTEGER NOT NULL DEFAULT 0");
 // Um envio interrompido pode ter sido aceito pelo WhatsApp. Não reenviar automaticamente.
 db.prepare(
   "UPDATE campaigns SET status='interrupted', error='Serviço reiniciado. Confira o histórico antes de criar outro lote.' WHERE status IN ('running','queued')",

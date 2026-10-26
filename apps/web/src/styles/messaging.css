@@ -285,6 +285,32 @@
   font-size: 8px;
   color: #a2afa5;
 }
+.chat-unread-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--green);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.chat-item.unread .chat-item-meta small {
+  color: var(--green);
+  font-weight: 650;
+}
+.chat-unread-count.marked {
+  min-width: 10px;
+  width: 10px;
+  height: 10px;
+  padding: 0;
+}
+.chat-item.unread .chat-name strong {
+  font-weight: 700;
+}
 .chat-main {
   container-type: inline-size;
   display: flex;

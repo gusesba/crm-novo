@@ -18,6 +18,8 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
     public Task<JsonElement> ResolvePhone(ResolvePhoneRequest r) => client.Send(current.Id, HttpMethod.Post, "resolve-phone", r);
     [HttpPut("chats/archive")]
     public Task<JsonElement> ArchiveChat(ArchiveChatRequest r) => client.Send(current.Id, HttpMethod.Put, "chats/archive", r);
+    [HttpPut("chats/read")]
+    public Task<JsonElement> ReadChat(ReadChatRequest r) => client.Send(current.Id, HttpMethod.Put, "chats/read", r);
     [HttpGet("chats")]
     public async Task<object> Chats(int? userId)
     {
@@ -49,6 +51,8 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
                 updatedAt = chat.GetProperty("updatedAt").GetInt64(),
                 archived = chat.GetProperty("archived").GetInt32() != 0,
                 pinnedAt = chat.GetProperty("pinnedAt").GetInt64(),
+                unreadCount = chat.TryGetProperty("unreadCount", out var unread) && unread.ValueKind == JsonValueKind.Number && unread.TryGetInt32(out var count) ? Math.Max(0, count) : 0,
+                markedUnread = chat.TryGetProperty("markedUnread", out var marked) && marked.ValueKind == JsonValueKind.Number && marked.TryGetInt32(out var flag) && flag != 0,
                 leadId = lead?.Id,
                 leadStatus = lead?.Status,
                 classifications = classificationsByLead[lead?.Id ?? 0].Select(x => new { x.Id, x.Name, x.Color })
@@ -194,6 +198,8 @@ public record AttachmentRequest(string Name, string Mime, string Data, bool Voic
 public record ContactRequest(string Name, string Phone);
 public record ResolvePhoneRequest([Required, RegularExpression(@"^\d{10,15}$")] string Phone);
 public record ArchiveChatRequest([Required, MaxLength(100), RegularExpression(@"^[^@\s]+@(s\.whatsapp\.net|g\.us|lid)$")] string ChatId, [Required] bool? Archived);
+public record ReadChatRequest([Required, MaxLength(100), RegularExpression(@"^[^@\s]+@(s\.whatsapp\.net|g\.us|lid)$")] string ChatId,
+    [Required, MaxLength(200)] string LastMessageId);
 public record SendRequest([Required] string ChatId, [MaxLength(10000)] string? Text, AttachmentRequest? Attachment, ContactRequest? Contact, string? ReplyTo);
 public record EditRequest([Required] string ChatId, [Required, MaxLength(10000)] string Text);
 public record ReactionRequest([Required] string ChatId, [MaxLength(8)] string Emoji);
