@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Crm.Api.Features.WhatsApp;
 
 [ApiController, Authorize, Route("api/whatsapp/accounts")]
-public class WhatsAppAccountsController(CrmDbContext db, CurrentUser current) : ControllerBase
+public class WhatsAppAccountsController(CrmDbContext db, CurrentUser current, WhatsAppClient client) : ControllerBase
 {
     [HttpGet]
     public async Task<object> List(int? userId)
@@ -29,6 +29,18 @@ public class WhatsAppAccountsController(CrmDbContext db, CurrentUser current) : 
         db.WhatsAppAccounts.Add(account);
         await db.SaveChangesAsync();
         return new { account.Id, account.Name };
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Remove(string id)
+    {
+        if (id == "default") throw new BusinessException("A conta Principal não pode ser removida.");
+        var account = await db.WhatsAppAccounts.SingleOrDefaultAsync(x => x.Id == id && x.UserId == current.Id)
+            ?? throw new BusinessException("Conta WhatsApp não encontrada.", 404);
+        await client.SendGlobal(HttpMethod.Delete, $"sessions/{current.Id}_{account.Id}");
+        db.WhatsAppAccounts.Remove(account);
+        await db.SaveChangesAsync();
+        return NoContent();
     }
 }
 

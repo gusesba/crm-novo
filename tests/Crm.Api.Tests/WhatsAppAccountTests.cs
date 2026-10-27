@@ -169,6 +169,60 @@ public class WhatsAppAccountTests
     }
 
     [Fact]
+    public async Task RemovingOwnedAccountRetiresOnlyItsSessionAndPersistsRemoval()
+    {
+        using var factory = new Factory();
+        using var owner = await factory.Login("camila");
+        var account = await Add(owner);
+        var other = await Add(owner, "Pessoal");
+        var response = await owner.DeleteAsync($"/api/whatsapp/accounts/{account}?accountId={other}&userId=3");
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal($"/sessions/2_{account}", Assert.Single(factory.Service.Paths));
+        using var reloaded = await factory.Login("camila");
+        var accounts = await reloaded.GetFromJsonAsync<JsonElement>("/api/whatsapp/accounts");
+        Assert.Equal(new[] { "default", other }, accounts.EnumerateArray().Select(x => x.GetProperty("id").GetString()));
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync($"/api/whatsapp/status?accountId={account}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.DeleteAsync($"/api/whatsapp/accounts/{account}")).StatusCode);
+        Assert.Single(factory.Service.Paths);
+    }
+
+    [Fact]
+    public async Task RemovingAccountRequiresOwnerCsrfAndKeepsPrimary()
+    {
+        using var factory = new Factory();
+        using var owner = await factory.Login("camila");
+        var account = await Add(owner);
+        foreach (var username in new[] { "admin", "rafael" })
+        {
+            using var other = await factory.Login(username);
+            Assert.Equal(HttpStatusCode.NotFound, (await other.DeleteAsync($"/api/whatsapp/accounts/{account}?userId=2")).StatusCode);
+        }
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.DeleteAsync("/api/whatsapp/accounts/default")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await owner.DeleteAsync("/api/whatsapp/accounts/missing")).StatusCode);
+        owner.DefaultRequestHeaders.Remove("X-CSRF-TOKEN");
+        Assert.Equal(HttpStatusCode.BadRequest, (await owner.DeleteAsync($"/api/whatsapp/accounts/{account}")).StatusCode);
+        using var anonymous = factory.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.DeleteAsync($"/api/whatsapp/accounts/{account}")).StatusCode);
+        Assert.Equal(2, (await owner.GetFromJsonAsync<JsonElement>("/api/whatsapp/accounts")).GetArrayLength());
+        Assert.Empty(factory.Service.Paths);
+    }
+
+    [Fact]
+    public async Task FailedSessionRemovalKeepsAccountAvailableForRetry()
+    {
+        using var factory = new Factory();
+        using var owner = await factory.Login("camila");
+        var account = await Add(owner);
+        factory.Service.Status = HttpStatusCode.BadGateway;
+        var response = await owner.DeleteAsync($"/api/whatsapp/accounts/{account}");
+        Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        Assert.Equal(2, (await owner.GetFromJsonAsync<JsonElement>("/api/whatsapp/accounts")).GetArrayLength());
+        factory.Service.Status = HttpStatusCode.OK;
+        Assert.Equal(HttpStatusCode.NoContent, (await owner.DeleteAsync($"/api/whatsapp/accounts/{account}")).StatusCode);
+        Assert.Single((await owner.GetFromJsonAsync<JsonElement>("/api/whatsapp/accounts")).EnumerateArray());
+    }
+
+    [Fact]
     public async Task LinkedLeadResolvesOnSelectedAdditionalAccountAndCampaignUsesSameAccount()
     {
         using var factory = new Factory();

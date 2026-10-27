@@ -34,6 +34,7 @@ import {
   campaignMessages,
   campaigns,
   cancelCampaign,
+  cancelSessionCampaigns,
   createCampaign,
 } from "./campaigns/worker.js";
 
@@ -74,6 +75,13 @@ export async function registerRoutes(app: FastifyInstance) {
   app.post("/sessions/:user/disconnect", async (req) =>
     disconnect(params.parse(req.params).user),
   );
+  app.delete("/sessions/:user", async (req) => {
+    const user = params.parse(req.params).user;
+    if (!user.includes("_"))
+      throw Object.assign(new Error("A conta Principal não pode ser removida."), { statusCode: 400 });
+    cancelSessionCampaigns(user);
+    return disconnect(user);
+  });
   app.get("/sessions/:user/chats", async (req) =>
     listChats(params.parse(req.params).user),
   );

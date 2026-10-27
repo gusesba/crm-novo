@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Fastify from "fastify";
+import { ZodError } from "zod";
 import { sessionIdSchema, sessionOwner } from "../src/sessions/session-id.js";
 
 const directory = mkdtempSync(join(tmpdir(), "via-multiple-accounts-"));
@@ -13,7 +14,12 @@ const { registerRoutes } = await import("../src/routes.js");
 const { saveMessage } = await import("../src/storage/messages.js");
 const { sqliteAuth } = await import("../src/storage/auth.js");
 const { disconnect } = await import("../src/sessions/manager.js");
+const { bindSessionNumber, backupMessages } = await import("../src/storage/backups.js");
 const app = Fastify();
+app.setErrorHandler((error, _req, reply) => {
+  const cause = error as Error & { statusCode?: number };
+  return reply.code(error instanceof ZodError ? 400 : cause.statusCode || 502).send({ message: cause.message });
+});
 await registerRoutes(app);
 const primary = "2";
 const extra = "2_" + "a".repeat(32);
@@ -59,4 +65,34 @@ test("desconectar uma conta remove somente suas credenciais e mantém os histór
     const messages = await app.inject(`/sessions/${user}/messages?chatId=${encodeURIComponent(chatId)}`);
     assert.equal(messages.json().length, 1);
   }
+});
+
+test("remover uma conta cancela somente seus disparos e preserva os históricos e o backup textual", async () => {
+  bindSessionNumber(extra, "5551888888888@s.whatsapp.net", true);
+  saveMessage(extra, { key: { id: "backup-kept", remoteJid: chatId, fromMe: false }, message: { conversation: "Preservada" }, messageTimestamp: 200 });
+  for (const user of [primary, extra, other]) {
+    sqliteAuth(user).saveCreds();
+    db.prepare("INSERT INTO campaigns(id,user_id,payload,status,created_at) VALUES(?,?,?,'running',?)")
+      .run(`remove-${user}`, user, "{}", Date.now());
+  }
+  const response = await app.inject({ method: "DELETE", url: `/sessions/${extra}` });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.json().status, "disconnected");
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM auth WHERE user_id=?").get(extra)?.count, 0);
+  assert.equal(db.prepare("SELECT status FROM campaigns WHERE id=?").get(`remove-${extra}`)?.status, "cancelled");
+  for (const user of [primary, other]) {
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM auth WHERE user_id=?").get(user)?.count, 1);
+    assert.equal(db.prepare("SELECT status FROM campaigns WHERE id=?").get(`remove-${user}`)?.status, "running");
+  }
+  const messages = await app.inject(`/sessions/${extra}/messages?chatId=${encodeURIComponent(chatId)}`);
+  assert.ok(messages.json().some((message: { text: string }) => message.text === "Preservada"));
+  assert.ok(backupMessages("2", "5551888888888", chatId).some((message) => message.text === "Preservada"));
+  assert.equal((await app.inject({ method: "DELETE", url: `/sessions/${extra}` })).statusCode, 200);
+});
+
+test("remoção rejeita a Principal e identificadores inválidos sem apagar credenciais", async () => {
+  sqliteAuth(primary).saveCreds();
+  assert.equal((await app.inject({ method: "DELETE", url: `/sessions/${primary}` })).statusCode, 400);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM auth WHERE user_id=?").get(primary)?.count, 1);
+  assert.equal((await app.inject({ method: "DELETE", url: "/sessions/2_invalid" })).statusCode, 400);
 });
