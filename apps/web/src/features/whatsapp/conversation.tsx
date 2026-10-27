@@ -4,7 +4,7 @@ import { useResource } from "@/hooks/use-resource";
 import { api, post, put } from "@/lib/api";
 import { date, time } from "@/lib/format";
 import type { Chat, Message, SharedContact } from "@/lib/types";
-import { Ban } from "lucide-react";
+import { Ban, Forward } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { MessageComposer } from "./message-composer";
 import { ForwardMessageModal } from "./forward-message-modal";
@@ -173,6 +173,9 @@ export function Conversation({
                   onDelete={() => setDeleting(m)}
                 />
               )}
+              {m.forwarded && m.kind !== "deleted" && (
+                <div className="message-forwarded"><Forward size={13} aria-hidden="true" /><span>Encaminhada</span></div>
+              )}
               {m.reply && m.kind !== "deleted" && (
                 <MessageReply
                   reply={messages.some((message) => message.id === m.reply!.id && message.kind === "deleted")
@@ -213,6 +216,7 @@ export function Conversation({
                 />
               )}
               <div className="message-meta">
+                {m.edited && m.kind !== "deleted" && <span className="message-edited">Editada ·</span>}
                 {m.contact ? time(m.timestamp) : `${date(m.timestamp)} · ${time(m.timestamp)}`}
               </div>
               {m.contact && !backup && (

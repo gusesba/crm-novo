@@ -1,6 +1,7 @@
 FROM node:22-bookworm-slim AS build
 WORKDIR /repo
 COPY package.json package-lock.json ./
+COPY scripts/patch-baileys.mjs scripts/
 COPY apps/web/package.json apps/web/
 COPY apps/whatsapp/package.json apps/whatsapp/
 RUN npm ci

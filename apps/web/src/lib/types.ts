@@ -106,6 +106,8 @@ export interface Message {
   kind: string;
   timestamp: number;
   canDeleteForEveryone: boolean;
+  edited?: boolean;
+  forwarded?: boolean;
   attachment?: {
     name: string;
     mime: string;

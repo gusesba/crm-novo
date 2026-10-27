@@ -256,6 +256,8 @@ test("atualização e edição persistem conteúdo e contexto de resposta", () =
     "Versão editada",
   );
   saveMessage("3", message("original", "Atualização direta"));
+  assert.equal(listMessages("3", chat)[0].text, "Versão editada");
+  saveMessage("3", { ...message("original"), message: { editedMessage: { message: { conversation: "Atualização direta" } } } });
   assert.equal(listMessages("3", chat).length, 1);
   assert.equal(listMessages("3", chat)[0].text, "Atualização direta");
 });

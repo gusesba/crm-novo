@@ -16,6 +16,7 @@ import {
   saveMessage,
 } from "../storage/messages.js";
 import { messageAttachments, type SendInput } from "./schemas.js";
+import { messageContext, messageMetadata, preserveMessageSecret } from "../storage/message-metadata.js";
 
 export async function sendMessage(
   user: string,
@@ -149,6 +150,7 @@ export async function editMessage(
   id: string,
   chatId: string,
   text: string,
+  getSocket: (user: string) => Pick<WASocket, "sendMessage"> = connectedSocket,
 ) {
   const previous = rawMessage(user, id);
   if (!previous?.key.fromMe || messageChatId(previous) !== chatId)
@@ -156,9 +158,11 @@ export async function editMessage(
       new Error("Só é possível editar suas mensagens nesta conversa."),
       { statusCode: 403 },
     );
-  await connectedSocket(user).sendMessage(chatId, { text, edit: previous.key });
-  previous.message = { conversation: text };
-  saveMessage(user, previous);
+  await getSocket(user).sendMessage(chatId, { text, edit: previous.key });
+  const contextInfo = messageContext(previous.message);
+  const edited = { ...previous, message: preserveMessageSecret(contextInfo ? { extendedTextMessage: { text, contextInfo } } : { conversation: text }, previous.message),
+    crmMetadata: { ...messageMetadata(previous), edited: true, editedAt: Date.now() } };
+  saveMessage(user, edited);
   return { edited: true };
 }
 export async function reactToMessage(

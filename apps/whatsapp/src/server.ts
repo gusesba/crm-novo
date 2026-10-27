@@ -6,8 +6,11 @@ import { registerRoutes } from "./routes.js";
 import { restoreSessions, stopSessions } from "./sessions/manager.js";
 import { stopCampaigns } from "./campaigns/worker.js";
 import { db } from "./storage/database.js";
+import { reconcileEncryptedEdits } from "./storage/encrypted-edits.js";
+import { deleteStoredMessage, saveMessage } from "./storage/messages.js";
 
 const app = Fastify({ logger: true, bodyLimit: 24_000_000 });
+reconcileEncryptedEdits(saveMessage, deleteStoredMessage);
 app.addHook("onRequest", async (req, reply) => {
   if (req.url === "/health") return;
   const supplied = Buffer.from(String(req.headers["x-service-key"] || ""));

@@ -7,12 +7,15 @@ import {
 import { db } from "./database.js";
 import { conversationName, savePushName } from "./contacts.js";
 import { messageReply } from "./message-replies.js";
+import { messageMetadata, preserveMessageSecret, type StoredMessage } from "./message-metadata.js";
+import { queueEncryptedEdit, replayEncryptedEdits } from "./encrypted-edits.js";
 
 export function saveMessage(user: string, msg: WAMessage) {
   const jid = messageChatId(msg);
   if (!jid || jid === "status@broadcast" || !msg.key.id || !msg.message) return;
-  const content = normalizeMessageContent(msg.message);
+  let content = normalizeMessageContent(msg.message);
   if (!content) return;
+  if (queueEncryptedEdit(user, jid, msg, saveMessage)) return;
   const reaction = content.reactionMessage;
   if (reaction?.key?.id) {
     const sender = msg.key.fromMe
@@ -25,8 +28,9 @@ export function saveMessage(user: string, msg: WAMessage) {
   if (edit && content.protocolMessage?.key?.id) {
     const original = rawMessage(user, content.protocolMessage.key.id);
     if (original && messageChatId(original) === jid) {
-      original.message = edit;
-      saveMessage(user, original);
+      const edited = { ...original, message: preserveMessageSecret(edit, original.message),
+        crmMetadata: { ...messageMetadata(original), edited: true, editedAt: Number(content.protocolMessage?.timestampMs || Number(msg.messageTimestamp || 0) * 1000) } };
+      saveMessage(user, edited);
     }
     return;
   }
@@ -39,6 +43,14 @@ export function saveMessage(user: string, msg: WAMessage) {
     return;
   }
   if (content.protocolMessage || content.senderKeyDistributionMessage) return;
+  const previous = rawMessage(user, msg.key.id);
+  const prior = previous && messageChatId(previous) === jid ? previous as StoredMessage : undefined;
+  if (prior?.crmMetadata?.editedAt && !messageMetadata(msg).edited) {
+    // Um snapshot antigo da original não deve desfazer uma revisão já confirmada.
+    msg = { ...msg, message: preserveMessageSecret(prior.message!, msg.message), crmMetadata: prior.crmMetadata } as StoredMessage;
+    content = normalizeMessageContent(msg.message);
+    if (!content) return;
+  }
   const kind = content.imageMessage
     ? "image"
     : content.videoMessage
@@ -73,6 +85,16 @@ export function saveMessage(user: string, msg: WAMessage) {
     if (sender) savePushName(user, sender, msg.pushName);
   }
   const name = conversationName(user, jid) || jid;
+  const metadata = messageMetadata(msg);
+  if (previous && messageChatId(previous) === jid) {
+    const known = messageMetadata(previous);
+    metadata.edited ||= known.edited;
+    metadata.forwarded ||= known.forwarded;
+  }
+  const incoming = msg as StoredMessage;
+  const stored = { ...msg, message: preserveMessageSecret(msg.message!, prior?.message),
+    ...(metadata.edited || metadata.forwarded ? { crmMetadata: { ...prior?.crmMetadata, ...incoming.crmMetadata, ...metadata,
+      editedAt: Math.max(prior?.crmMetadata?.editedAt || 0, incoming.crmMetadata?.editedAt || 0) } } : {}) };
   const saved = db.prepare(
     `INSERT INTO messages VALUES(?,?,?,?,?,?,?,?)
     ON CONFLICT(user_id,id) DO UPDATE SET text=excluded.text,kind=excluded.kind,
@@ -81,13 +103,13 @@ export function saveMessage(user: string, msg: WAMessage) {
     WHERE messages.kind != 'deleted'`,
   ).run(
     user,
-    msg.key.id,
+    msg.key.id!,
     jid,
     text,
     msg.key.fromMe ? 1 : 0,
     kind,
     timestamp,
-    JSON.stringify(msg, BufferJSON.replacer),
+    JSON.stringify(stored, BufferJSON.replacer),
   );
   if (!saved.changes) return;
   db.prepare(
@@ -96,6 +118,7 @@ export function saveMessage(user: string, msg: WAMessage) {
     last_text=CASE WHEN excluded.updated_at >= chats.updated_at THEN excluded.last_text ELSE chats.last_text END,
     updated_at=MAX(chats.updated_at,excluded.updated_at)`,
   ).run(user, jid, name, text, timestamp);
+  replayEncryptedEdits(user, jid, msg.key.id!, saveMessage);
 }
 export function messageChatId(message: WAMessage) {
   return message.key.remoteJid?.endsWith("@lid") &&
@@ -182,12 +205,14 @@ export function listMessages(
     mine: number;
   }[];
   return messages.map(({ raw, ...message }) => {
+    const metadata = message.kind === "deleted" ? { edited: false, forwarded: false } : messageMetadata(JSON.parse(raw, BufferJSON.reviver));
     const media = messageMedia(raw);
     const contact = messageContact(raw);
     const attachment = media?.attachment;
     const kind = media?.kind || message.kind;
     return {
       ...message,
+      ...metadata,
       canDeleteForEveryone: message.kind !== "deleted" && canDeleteForEveryone(
         !!message.mine,
         message.timestamp,

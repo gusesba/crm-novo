@@ -6,6 +6,7 @@
     "apps/whatsapp"
   ],
   "scripts": {
+    "postinstall": "node scripts/patch-baileys.mjs",
     "dev": "concurrently -k -n api,web,whats \"dotnet run --project apps/api --no-launch-profile -- --environment Development\" \"npm run dev -w apps/web\" \"npm run dev -w apps/whatsapp\"",
     "build": "npm run build -w apps/web && npm run build -w apps/whatsapp && dotnet build Autoescola.slnx",
     "test": "dotnet test Autoescola.slnx && npm run test -w apps/whatsapp",
