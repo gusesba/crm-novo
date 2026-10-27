@@ -10,8 +10,13 @@ import { messageReply } from "./message-replies.js";
 import { messageMetadata, preserveMessageSecret, type StoredMessage } from "./message-metadata.js";
 import { queueEncryptedEdit, replayEncryptedEdits } from "./encrypted-edits.js";
 import { removeStoredMedia } from "./media-storage.js";
+import { backupDetachedMessage, backupMessage, removeBackupMessage, sessionNumber } from "./backups.js";
 
-export function saveMessage(user: string, msg: WAMessage) {
+export function saveMessage(user: string, msg: WAMessage, sourceNumber?: string) {
+  if (sourceNumber && sourceNumber !== sessionNumber(user)) {
+    backupDetachedMessage(user, sourceNumber, msg);
+    return;
+  }
   const jid = messageChatId(msg);
   if (!jid || jid === "status@broadcast" || !msg.key.id || !msg.message) return;
   let content = normalizeMessageContent(msg.message);
@@ -119,6 +124,7 @@ export function saveMessage(user: string, msg: WAMessage) {
     last_text=CASE WHEN excluded.updated_at >= chats.updated_at THEN excluded.last_text ELSE chats.last_text END,
     updated_at=MAX(chats.updated_at,excluded.updated_at)`,
   ).run(user, jid, name, text, timestamp);
+  backupMessage(user, msg.key.id!);
   replayEncryptedEdits(user, jid, msg.key.id!, saveMessage);
 }
 export function messageChatId(message: WAMessage) {
@@ -329,6 +335,7 @@ export function saveMessageReaction(
     db.prepare(
       "DELETE FROM message_reactions WHERE user_id=? AND message_id=? AND sender=?",
     ).run(user, messageId, sender);
+  backupMessage(user, messageId);
 }
 
 export function markMessageDeleted(user: string, id: string, chatId: string) {
@@ -355,6 +362,7 @@ export function markMessageDeleted(user: string, id: string, chatId: string) {
   db.prepare(
     "UPDATE chats SET last_text=? WHERE user_id=? AND id=?",
   ).run(latest.text, user, chatId);
+  backupMessage(user, id);
   return true;
 }
 
@@ -363,6 +371,7 @@ export function deleteStoredMessage(user: string, id: string, chatId: string) {
     .prepare("SELECT 1 FROM messages WHERE user_id=? AND id=? AND chat_id=?")
     .get(user, id, chatId);
   if (!stored) return false;
+  removeBackupMessage(user, chatId, id);
   removeStoredMedia(user, id);
   db.prepare(
     "DELETE FROM message_reactions WHERE user_id=? AND message_id=?",

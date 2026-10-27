@@ -16,6 +16,7 @@ import {
 import { messageAttachments, type SendInput } from "./schemas.js";
 import { messageContext, messageMetadata, preserveMessageSecret } from "../storage/message-metadata.js";
 import { storeMedia } from "../storage/media-storage.js";
+import { markBackupMessageDeleted, sessionNumber } from "../storage/backups.js";
 export { media } from "./media.js";
 
 export async function sendMessage(
@@ -36,7 +37,8 @@ export async function sendMessage(
   if (totalSize > 16 * 1024 * 1024)
     throw Object.assign(new Error("Os anexos devem somar no máximo 16 MB."), { statusCode: 400 });
   const socket = getSocket(user);
-  if (!input.attachments?.length) return sendSingleMessage(user, input, socket);
+  const sourceNumber = sessionNumber(user);
+  if (!input.attachments?.length) return sendSingleMessage(user, input, socket, sourceNumber);
   const ids: string[] = [];
   let sentAttachments = 0;
   let textSent = false;
@@ -48,14 +50,14 @@ export async function sendMessage(
       const result = await sendSingleMessage(user, {
         chatId: input.chatId, attachment: file, text,
         replyTo: index === 0 ? input.replyTo : undefined,
-      }, socket);
+      }, socket, sourceNumber);
       ids.push(result.id);
       sentAttachments++;
       if (text?.trim()) textSent = true;
     }
     if (input.text?.trim() && !textSent) {
       signal?.throwIfAborted();
-      const result = await sendSingleMessage(user, { chatId: input.chatId, text: input.text }, socket);
+      const result = await sendSingleMessage(user, { chatId: input.chatId, text: input.text }, socket, sourceNumber);
       ids.push(result.id);
       textSent = true;
     }
@@ -66,7 +68,9 @@ export async function sendMessage(
   }
   return { id: ids.at(-1)!, ids, sent: true as const, sentAttachments, textSent };
 }
-async function sendSingleMessage(user: string, input: SendInput, socket: Pick<WASocket, "sendMessage">) {
+async function sendSingleMessage(user: string, input: SendInput, socket: Pick<WASocket, "sendMessage">, sourceNumber?: string) {
+  if (sourceNumber && sourceNumber !== sessionNumber(user))
+    throw new Error("O número da conta mudou. Confira o histórico antes de continuar o envio.");
   let content: AnyMessageContent = { text: input.text || "" };
   if (input.contact) {
     const { name, phone } = input.contact;
@@ -133,20 +137,21 @@ async function sendSingleMessage(user: string, input: SendInput, socket: Pick<WA
     });
   const result = await socket.sendMessage(input.chatId, content, { quoted });
   if (!result?.key.id) throw new Error("O WhatsApp não confirmou o envio.");
-  saveMessage(user, result);
-  if (input.attachment) {
+  saveMessage(user, result, sourceNumber);
+  if (input.attachment && (!sourceNumber || sourceNumber === sessionNumber(user))) {
     const file = input.attachment;
     const data = file.voiceNote ? (content as { audio: Buffer }).audio : Buffer.from(file.data, "base64");
     storeMedia(user, result.key.id, { name: file.name, mime: file.voiceNote ? "audio/ogg; codecs=opus" : file.mime, data }, Number(result.messageTimestamp || Math.floor(Date.now() / 1000)) * 1000);
   }
   // Áudios não aceitam legenda: enviar o texto como mensagem separada.
   if (input.attachment?.mime.startsWith("audio/") && !input.attachment.asDocument && input.text?.trim()) {
+    if (sourceNumber && sourceNumber !== sessionNumber(user)) throw new Error("O áudio foi confirmado, mas o número da conta mudou antes do texto. Confira o backup do número original.");
     const caption = await socket.sendMessage(input.chatId, {
       text: input.text,
     });
     if (!caption?.key.id)
       throw new Error("O áudio foi enviado, mas o texto não foi confirmado.");
-    saveMessage(user, caption);
+    saveMessage(user, caption, sourceNumber);
   }
   return { id: result.key.id, sent: true as const };
 }
@@ -158,6 +163,7 @@ export async function editMessage(
   getSocket: (user: string) => Pick<WASocket, "sendMessage"> = connectedSocket,
 ) {
   const previous = rawMessage(user, id);
+  const sourceNumber = sessionNumber(user);
   if (!previous?.key.fromMe || messageChatId(previous) !== chatId)
     throw Object.assign(
       new Error("Só é possível editar suas mensagens nesta conversa."),
@@ -167,7 +173,7 @@ export async function editMessage(
   const contextInfo = messageContext(previous.message);
   const edited = { ...previous, message: preserveMessageSecret(contextInfo ? { extendedTextMessage: { text, contextInfo } } : { conversation: text }, previous.message),
     crmMetadata: { ...messageMetadata(previous), edited: true, editedAt: Date.now() } };
-  saveMessage(user, edited);
+  saveMessage(user, edited, sourceNumber);
   return { edited: true };
 }
 export async function reactToMessage(
@@ -177,11 +183,12 @@ export async function reactToMessage(
   emoji: string,
 ) {
   const previous = conversationMessage(user, id, chatId);
+  const sourceNumber = sessionNumber(user);
   const result = await connectedSocket(user).sendMessage(chatId, {
     react: { text: emoji, key: previous.key },
   });
   if (!result?.key.id) throw new Error("O WhatsApp não confirmou a reação.");
-  saveMessage(user, result);
+  saveMessage(user, result, sourceNumber);
   return { reacted: true };
 }
 export async function forwardMessage(
@@ -190,6 +197,7 @@ export async function forwardMessage(
   targetChatId: string,
 ) {
   const previous = rawMessage(user, id);
+  const sourceNumber = sessionNumber(user);
   if (!previous)
     throw Object.assign(new Error("Mensagem não encontrada."), {
       statusCode: 404,
@@ -200,7 +208,7 @@ export async function forwardMessage(
   });
   if (!result?.key.id)
     throw new Error("O WhatsApp não confirmou o encaminhamento.");
-  saveMessage(user, result);
+  saveMessage(user, result, sourceNumber);
   return { id: result.key.id, forwarded: true };
 }
 export async function deleteMessage(
@@ -218,6 +226,7 @@ export async function deleteMessage(
   }
   const previous = conversationMessage(user, id, chatId);
   if (forEveryone) {
+    const sourceNumber = sessionNumber(user);
     if (!previous.key.fromMe)
       throw Object.assign(
         new Error("Só é possível excluir suas mensagens para todos."),
@@ -233,7 +242,8 @@ export async function deleteMessage(
     const result = await connectedSocket(user).sendMessage(chatId, {
       delete: previous.key,
     });
-    markMessageDeleted(user, id, chatId);
+    if (sourceNumber && sourceNumber !== sessionNumber(user)) markBackupMessageDeleted(user, sourceNumber, chatId, id);
+    else markMessageDeleted(user, id, chatId);
     if (!result?.key.id)
       throw new Error("O WhatsApp não confirmou o envio da solicitação.");
     return { requested: true, forEveryone: true };

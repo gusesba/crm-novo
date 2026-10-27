@@ -115,6 +115,10 @@ export function cancelCampaign(user: string, id: string) {
   ).run(id, user);
   return { cancelled: true };
 }
+export function cancelSessionCampaigns(user: string) {
+  const campaigns = db.prepare("SELECT id FROM campaigns WHERE user_id=? AND status='running'").all(user) as { id: string }[];
+  for (const campaign of campaigns) cancelCampaign(user, campaign.id);
+}
 async function run(
   id: string,
   user: string,

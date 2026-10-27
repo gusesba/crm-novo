@@ -107,6 +107,7 @@ export interface Message {
   kind: string;
   timestamp: number;
   canDeleteForEveryone: boolean;
+  mediaLabel?: string;
   edited?: boolean;
   forwarded?: boolean;
   attachment?: {

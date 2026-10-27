@@ -2,7 +2,7 @@ import { Providers } from "@/components/providers";
 import type { Metadata } from "next";
 import "./globals.css";
 export const metadata: Metadata = {
-  title: "via crm — Seu próximo caminho",
+  title: "as crm — Seu próximo caminho",
   description: "Relacionamento e gestão comercial para autoescolas.",
 };
 export default function RootLayout({

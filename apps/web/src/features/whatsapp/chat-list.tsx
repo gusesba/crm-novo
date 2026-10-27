@@ -11,9 +11,9 @@ type Props = {
   views?: ChatView[];
   search: string;
   selected?: string;
-  pictureUrl: (chatId: string) => string;
+  pictureUrl?: (chatId: string) => string;
   onSelect: (chat: Chat) => void;
-  onOpenPhoto: (chat: Chat) => void;
+  onOpenPhoto?: (chat: Chat) => void;
 };
 
 type ItemProps = Omit<Props, "chats" | "search" | "views"> & { chat: Chat };
@@ -25,14 +25,14 @@ function ChatItem({ chat, selected, pictureUrl, onSelect, onOpenPhoto }: ItemPro
     <div
       className={`chat-item ${selected === chat.id ? "active" : ""} ${unreadCount > 0 || chat.markedUnread ? "unread" : ""}`}
     >
-      <button
+      {onOpenPhoto && pictureUrl ? <button
         type="button"
         className="profile-photo-button"
         aria-label={`Abrir foto de perfil de ${name}`}
         onClick={() => onOpenPhoto(chat)}
       >
         <Avatar name={name} src={pictureUrl(chat.id)} />
-      </button>
+      </button> : <Avatar name={name} />}
       <button
         type="button"
         className="chat-item-select"

@@ -5,6 +5,7 @@ import { listMessages, listRecentStickers } from "./storage/messages.js";
 import { connect, connectedSocket, disconnect, sessionStatus } from "./sessions/manager.js";
 import { resolvePhone } from "./messaging/resolve-phone.js";
 import { sessionIdSchema } from "./sessions/session-id.js";
+import { backupNumbers, backupChats, backupMessages } from "./storage/backups.js";
 import {
   archiveChatSchema,
   campaignSchema,
@@ -37,6 +38,17 @@ import {
 } from "./campaigns/worker.js";
 
 export async function registerRoutes(app: FastifyInstance) {
+  const backupParams = z.object({ owner: z.string().regex(/^\d+$/), number: z.string().regex(/^(\d{10,15}|legacy_\d+(?:_[a-f0-9]{32})?)$/).optional() });
+  app.get("/backups/:owner/numbers", async (req) => backupNumbers(backupParams.parse(req.params).owner));
+  app.get("/backups/:owner/:number/chats", async (req) => {
+    const { owner, number } = backupParams.parse(req.params);
+    return backupChats(owner, number!);
+  });
+  app.get("/backups/:owner/:number/messages", async (req) => {
+    const { owner, number } = backupParams.parse(req.params);
+    const query = z.object({ chatId: z.string().min(1).max(100), before: z.coerce.number().finite().optional(), beforeId: z.string().max(200).optional() }).parse(req.query);
+    return backupMessages(owner, number!, query.chatId, query.before, query.beforeId);
+  });
   app.get("/media-storage", async () => mediaStorageStatus());
   app.put("/media-storage/settings", async (req) => saveMediaSettings(mediaSettingsSchema.parse(req.body)));
   app.post("/media-storage/cleanup-preview", async (req) => mediaCleanupPreview(mediaCleanupSchema.parse(req.body).days));

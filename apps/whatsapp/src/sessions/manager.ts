@@ -24,6 +24,8 @@ import {
 import { backfillChatStates, saveChatState } from "../storage/chat-states.js";
 import { syncReadEvents } from "./read-sync.js";
 import { cacheIncomingMedia } from "../messaging/media.js";
+import { accountPhone, bindSessionNumber, sessionNumber } from "../storage/backups.js";
+import { cancelSessionCampaigns } from "../campaigns/worker.js";
 
 type Session = {
   socket?: WASocket;
@@ -78,7 +80,30 @@ export async function connect(user: string) {
       key.id ? rawMessage(user, key.id)?.message || undefined : undefined,
   });
   session.socket = socket;
-  socket.ev.on("creds.update", saveCreds);
+  const currentAccount = () => {
+    if (session.socket !== socket || session.stopped) return false;
+    const identity = socket.user?.id || state.creds.me?.id;
+    const phone = accountPhone(identity);
+    if (!phone || !identity) return false;
+    const previous = sessionNumber(user);
+    if (previous !== phone) {
+      try {
+        if (previous) cancelSessionCampaigns(user);
+        bindSessionNumber(user, identity);
+        session.groupsSynced = false;
+      } catch (error) {
+        logger.error(error, "Failed to bind phone backup; keeping previous history");
+        session.status = "disconnected";
+        session.stopped = true;
+        socket.end(undefined);
+        return false;
+      }
+    }
+    return true;
+  };
+  socket.ev.on("creds.update", () => {
+    if (session.socket === socket && !session.stopped) saveCreds();
+  });
   socket.ev.on("connection.update", async (update) => {
     if (session.socket !== socket) return;
     if (update.qr) {
@@ -86,6 +111,14 @@ export async function connect(user: string) {
       session.status = "qr";
     }
     if (update.connection === "open") {
+      const identity = socket.user?.id || state.creds.me?.id;
+      if (!identity || !accountPhone(identity)) {
+        logger.error("Connected account has no phone identity");
+        socket.end(undefined);
+        return;
+      }
+      if (!currentAccount()) return;
+      bindSessionNumber(user, identity);
       session.status = "connected";
       session.qr = undefined;
       session.attempts = 0;
@@ -124,13 +157,15 @@ export async function connect(user: string) {
     }
   });
   socket.ev.on("messages.upsert", (event) => {
+    if (!currentAccount()) return;
     for (const message of event.messages) {
       saveMessage(user, message);
       if (event.type === "notify") cacheIncomingMedia(user, message);
     }
   });
-  syncReadEvents(user, socket, state);
+  syncReadEvents(user, socket, state, currentAccount);
   socket.ev.on("messaging-history.set", (event) => {
+    if (!currentAccount()) return;
     for (const message of event.messages) saveMessage(user, message);
     for (const contact of event.contacts) saveContact(user, contact);
     for (const chat of event.chats) {
@@ -140,26 +175,33 @@ export async function connect(user: string) {
     }
   });
   socket.ev.on("chats.upsert", (chats) => {
+    if (!currentAccount()) return;
     for (const chat of chats) saveChatState(user, chat);
   });
   socket.ev.on("chats.update", (chats) => {
+    if (!currentAccount()) return;
     for (const chat of chats) saveChatState(user, chat, "delta");
   });
   socket.ev.on("contacts.upsert", (contacts) => {
+    if (!currentAccount()) return;
     for (const contact of contacts) saveContact(user, contact);
   });
   socket.ev.on("contacts.update", (contacts) => {
+    if (!currentAccount()) return;
     for (const contact of contacts) saveContact(user, contact);
   });
   socket.ev.on("groups.upsert", (groups) => {
+    if (!currentAccount()) return;
     for (const group of groups)
       saveConversationName(user, group.id, group.subject);
   });
   socket.ev.on("groups.update", (groups) => {
+    if (!currentAccount()) return;
     for (const group of groups)
       if (group.id) saveConversationName(user, group.id, group.subject);
   });
   socket.ev.on("messages.update", (updates) => {
+    if (!currentAccount()) return;
     for (const { key, update } of updates) {
       if (
         key.id &&
@@ -177,6 +219,7 @@ export async function connect(user: string) {
     }
   });
   socket.ev.on("messages.reaction", (reactions) => {
+    if (!currentAccount()) return;
     for (const { key, reaction } of reactions) {
       const senderKey = reaction.key;
       const sender = senderKey?.fromMe
@@ -187,6 +230,7 @@ export async function connect(user: string) {
     }
   });
   socket.ev.on("messages.delete", (event) => {
+    if (!currentAccount()) return;
     if (!("keys" in event)) return;
     for (const key of event.keys) {
       if (!key.id) continue;

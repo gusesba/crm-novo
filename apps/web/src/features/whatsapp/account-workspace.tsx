@@ -9,28 +9,15 @@ import { post } from "@/lib/api";
 import type { WhatsAppAccount } from "@/lib/whatsapp-account";
 import { WhatsAppAccountContext } from "./account-context";
 
-export function WhatsAppWorkspace({ backup = false, children }: { backup?: boolean; children: ReactNode }) {
-  const { user, catalog } = useApp();
-  const [historyUser, setHistoryUser] = useState("");
-  return <>
-    {backup && user?.isAdmin && <select
-      className="history-user-select"
-      aria-label="Usuário do histórico"
-      value={historyUser}
-      onChange={(event) => setHistoryUser(event.target.value)}
-    >
-      <option value="">Meu histórico</option>
-      {catalog?.users.filter((item) => item.id !== user.id).map((item) =>
-        <option key={item.id} value={item.id}>{item.name}</option>)}
-    </select>}
-    <AccountTabs key={`${user?.id}-${historyUser}`} userId={historyUser} backup={backup}>{children}</AccountTabs>
-  </>;
+export function WhatsAppWorkspace({ children }: { children: ReactNode }) {
+  const { user } = useApp();
+  return <AccountTabs key={user?.id}>{children}</AccountTabs>;
 }
 
-function AccountTabs({ userId, backup, children }: { userId: string; backup: boolean; children: ReactNode }) {
+function AccountTabs({ children }: { children: ReactNode }) {
   const params = useSearchParams();
-  const accounts = useResource<WhatsAppAccount[]>(`/whatsapp/accounts${userId ? `?userId=${userId}` : ""}`, 10000);
-  const [selected, setSelected] = useState(!userId ? params.get("accountId") || "default" : "default");
+  const accounts = useResource<WhatsAppAccount[]>("/whatsapp/accounts", 10000);
+  const [selected, setSelected] = useState(params.get("accountId") || "default");
   const [created, setCreated] = useState<WhatsAppAccount[]>([]);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -38,8 +25,8 @@ function AccountTabs({ userId, backup, children }: { userId: string; backup: boo
   const [error, setError] = useState("");
   useEffect(() => {
     const requested = params.get("accountId");
-    if (!userId && requested) setSelected(requested);
-  }, [params, userId]);
+    if (requested) setSelected(requested);
+  }, [params]);
   const items = [...(accounts.data || []), ...created.filter((item) => !accounts.data?.some((saved) => saved.id === item.id))];
   const active = items.find((item) => item.id === selected);
   async function create(event: FormEvent) {
@@ -84,11 +71,11 @@ function AccountTabs({ userId, backup, children }: { userId: string; backup: boo
             }}
           >{account.name}</button>)}
         </div>
-        {!backup && <button type="button" className="button secondary compact" onClick={() => { setError(""); setOpen(true); }}>
+        <button type="button" className="button secondary compact" onClick={() => { setError(""); setOpen(true); }}>
           <Plus size={15} /> Adicionar conta
-        </button>}
+        </button>
       </div>
-      {active ? <WhatsAppAccountContext.Provider key={active.id} value={{ accountId: active.id, userId }}>
+      {active ? <WhatsAppAccountContext.Provider key={active.id} value={{ accountId: active.id, userId: "" }}>
         <div role="tabpanel" id="whatsapp-account-panel" aria-labelledby={`account-tab-${active.id}`}>{children}</div>
       </WhatsAppAccountContext.Provider> : accounts.data && <ErrorBox message="Conta WhatsApp não encontrada. Selecione uma das contas acima." />}
     </>}

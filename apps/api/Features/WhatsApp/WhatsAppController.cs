@@ -31,6 +31,25 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
     {
         var historyUser = await HistoryUser(userId);
         var chats = await client.Send(historyUser, HttpMethod.Get, "chats");
+        return await EnrichChats(chats, historyUser);
+    }
+    [HttpGet("backup/numbers")]
+    public async Task<JsonElement> BackupNumbers(int? userId)
+        => await client.SendGlobal(HttpMethod.Get, $"backups/{await HistoryUser(userId)}/numbers");
+    [HttpGet("backup/chats")]
+    public async Task<object> BackupChats([Required, RegularExpression(@"^(\d{10,15}|legacy_\d+(?:_[a-f0-9]{32})?)$")] string number, int? userId)
+    {
+        var historyUser = await HistoryUser(userId);
+        var chats = await client.SendGlobal(HttpMethod.Get, $"backups/{historyUser}/{Uri.EscapeDataString(number)}/chats");
+        return await EnrichChats(chats, historyUser);
+    }
+    [HttpGet("backup/messages")]
+    public async Task<JsonElement> BackupMessages([Required, RegularExpression(@"^(\d{10,15}|legacy_\d+(?:_[a-f0-9]{32})?)$")] string number,
+        [Required, MaxLength(100)] string chatId, int? userId, long? before, [MaxLength(200)] string? beforeId)
+        => await client.SendGlobal(HttpMethod.Get, $"backups/{await HistoryUser(userId)}/{Uri.EscapeDataString(number)}/messages?chatId={Uri.EscapeDataString(chatId)}{(before.HasValue ? "&before=" + before : "")}{(beforeId != null ? "&beforeId=" + Uri.EscapeDataString(beforeId) : "")}");
+
+    private async Task<object> EnrichChats(JsonElement chats, int historyUser)
+    {
         var linkedLeads = await current.Scope(db.Leads.AsNoTracking())
             .Where(x => x.ChatUserId == historyUser && x.ChatId != null)
             .Select(x => new { x.Id, x.Name, x.ChatId, x.Status }).ToListAsync();

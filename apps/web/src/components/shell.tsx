@@ -6,7 +6,6 @@ import {
   CalendarDays,
   ChartNoAxesCombined,
   ChevronRight,
-  CircleHelp,
   ContactRound,
   LayoutDashboard,
   LogOut,
@@ -14,10 +13,8 @@ import {
   MessageCircle,
   Radio,
   Settings2,
-  ShieldCheck,
   UsersRound,
   Vault,
-  X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -58,7 +55,6 @@ export function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const router = useRouter();
   const [mobile, setMobile] = useState(false);
-  const [help, setHelp] = useState(false);
   useEffect(() => {
     if (!loading && !user && !error) router.replace("/login");
   }, [loading, user, error, router]);
@@ -86,10 +82,10 @@ export function Shell({ children }: { children: ReactNode }) {
           href={user.isAdmin ? "/dashboard" : "/my-leads"}
         >
           <span className="brand-mark">
-            v<span>ı</span>
+            a<span>s</span>
           </span>
           <strong>
-            via<span>crm</span>
+            as<span>crm</span>
           </strong>
           <span className="brand-tag">AUTOESCOLAS</span>
         </Link>
@@ -98,7 +94,7 @@ export function Shell({ children }: { children: ReactNode }) {
             <Building2 size={20} />
           </span>
           <div>
-            <strong>Sua autoescola</strong>
+            <strong>Autoescola Silva</strong>
             <span>Workspace comercial</span>
           </div>
           <span className="online-dot" />
@@ -169,37 +165,13 @@ export function Shell({ children }: { children: ReactNode }) {
                 "Todas as unidades"}
             </span>
             <span className="topbar-divider" />
-            <button
-              className="icon-button"
-              aria-label="Ajuda"
-              onClick={() => setHelp(!help)}
-            >
-              <CircleHelp size={19} />
-            </button>
             <Avatar small name={user.name} />
           </div>
         </header>
-        {help && (
-          <div className="help-banner">
-            <ShieldCheck size={20} />
-            <p>
-              <strong>Seu espaço comercial.</strong> Cadastre leads, programe
-              retornos e acompanhe as conversas. Em Disparos, os contatos “Não
-              Enviar Mais” são excluídos automaticamente.
-            </p>
-            <button
-              className="icon-button"
-              aria-label="Fechar ajuda"
-              onClick={() => setHelp(false)}
-            >
-              <X size={18} />
-            </button>
-          </div>
-        )}
         <main className="main-content">{children}</main>
         <footer className="app-footer">
           <span>
-            via crm <span>·</span> Feito para conectar caminhos.
+            as crm <span>·</span> Feito para conectar caminhos.
           </span>
           <span>
             <span className="online-dot" /> Ambiente de trabalho

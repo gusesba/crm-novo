@@ -4,6 +4,7 @@ import type {
   WASocket,
 } from "@whiskeysockets/baileys";
 import { db } from "./database.js";
+import { backupChatName } from "./backups.js";
 
 function saveName(user: string, id: string, name: string, priority: number) {
   if (!id || !name.trim()) return;
@@ -14,12 +15,14 @@ function saveName(user: string, id: string, name: string, priority: number) {
        priority=MAX(contacts.priority,excluded.priority)`,
   ).run(user, id, name.trim(), priority);
   const resolvedName = contactName(user, id);
-  if (resolvedName)
+  if (resolvedName) {
     db.prepare("UPDATE chats SET name=? WHERE user_id=? AND id=?").run(
       resolvedName,
       user,
       id,
     );
+    backupChatName(user, id, resolvedName);
+  }
 }
 
 export function saveContact(user: string, contact: Partial<Contact>) {

@@ -12,13 +12,15 @@ import { useSearchParams } from "next/navigation";
 import { useContext, useEffect, useState } from "react";
 import { WhatsAppAccountContext } from "./account-context";
 import { WhatsAppWorkspace } from "./account-workspace";
+import { BackupNumberContext, BackupWorkspace } from "./backup-workspace";
 import { Connection } from "./connection";
 import { Conversation } from "./conversation";
 import { ChatList } from "./chat-list";
 import { ContactButton, ContactForm } from "./contact-form";
 
 export function ChatPage({ backup = false }: { backup?: boolean }) {
-  return <WhatsAppWorkspace backup={backup}><ChatContent backup={backup} /></WhatsAppWorkspace>;
+  return backup ? <BackupWorkspace><ChatContent backup /></BackupWorkspace>
+    : <WhatsAppWorkspace><ChatContent backup={false} /></WhatsAppWorkspace>;
 }
 
 function ChatContent({ backup }: { backup: boolean }) {
@@ -26,6 +28,7 @@ function ChatContent({ backup }: { backup: boolean }) {
   const { user, notify } = useApp();
   const params = useSearchParams();
   const { accountId, userId: historyUser } = useContext(WhatsAppAccountContext);
+  const backupNumber = useContext(BackupNumberContext);
   const [chat, setChat] = useState<Chat>();
   const [profilePhoto, setProfilePhoto] = useState<{ name: string; src: string }>();
   const [photoFailed, setPhotoFailed] = useState(false);
@@ -49,7 +52,9 @@ function ChatContent({ backup }: { backup: boolean }) {
       src: pictureUrl(contact.id),
     });
   }
-  const chats = useResource<Chat[]>(`/whatsapp/chats${suffix}`, 5000);
+  const chats = useResource<Chat[]>(backup
+    ? `/whatsapp/backup/chats?number=${encodeURIComponent(backupNumber)}${historyUser ? `&userId=${historyUser}` : ""}`
+    : `/whatsapp/chats${suffix}`, 5000);
   const leadMatch = useResource<PageResult<Lead>>(
     chat && !backup && chat.id.endsWith("@s.whatsapp.net")
       ? `/leads?mine=true&search=${chat.id.split("@")[0]}`
@@ -211,9 +216,9 @@ function ChatContent({ backup }: { backup: boolean }) {
                 views={backup ? undefined : views}
                 search={search}
                 selected={chat?.id}
-                pictureUrl={pictureUrl}
+                pictureUrl={backup ? undefined : pictureUrl}
                 onSelect={setChat}
-                onOpenPhoto={openProfilePhoto}
+                onOpenPhoto={backup ? undefined : openProfilePhoto}
               />
             )}
           </div>
@@ -221,14 +226,14 @@ function ChatContent({ backup }: { backup: boolean }) {
         {chat ? (
           <div className="chat-main">
             <div className="chat-top">
-              <button
+              {backup ? <Avatar name={selectedChat?.name || chat.name} /> : <button
                 type="button"
                 className="profile-photo-button"
                 aria-label={`Abrir foto de perfil de ${chat.name}`}
                 onClick={() => openProfilePhoto(chat)}
               >
                 <Avatar name={chat.name} src={pictureUrl(chat.id)} eager />
-              </button>
+              </button>}
               <div>
                 <div className="chat-top-name">
                   <h3>{linkedLead?.name || selectedChat?.name || chat.name.split("@")[0]}</h3>
@@ -287,6 +292,7 @@ function ChatContent({ backup }: { backup: boolean }) {
               chatId={chat.id}
               userId={backup ? historyUser : undefined}
               backup={backup}
+              backupNumber={backup ? backupNumber : undefined}
               chats={chats.data || []}
               onStartConversation={(contact) => void startConversation(contact)}
               onRead={chats.reload}

@@ -37,10 +37,10 @@ export default function Login() {
       <section className="login-art">
         <div className="brand">
           <span className="brand-mark">
-            v<span>ı</span>
+            a<span>s</span>
           </span>
           <strong>
-            via<span>crm</span>
+            as<span>crm</span>
           </strong>
         </div>
         <div className="login-copy">

@@ -2,7 +2,7 @@ import { areJidsSameUser, BufferJSON, jidNormalizedUser, normalizeMessageContent
 import { db } from "./database.js";
 import { contactName } from "./contacts.js";
 
-export function messageReply(user: string, chatId: string, raw: string) {
+export function messageReply(user: string, chatId: string, raw: string, identity?: { id?: string; lid?: string }) {
   const message = JSON.parse(raw, BufferJSON.reviver) as WAMessage;
   const content = normalizeMessageContent(message.message);
   const context = Object.values(content || {}).find((part) =>
@@ -19,7 +19,7 @@ export function messageReply(user: string, chatId: string, raw: string) {
   const sender = context.participant || original?.key.participantAlt || original?.key.participant ||
     (stored && !stored.mine && !chatId.endsWith("@g.us") ? chatId : undefined);
   const auth = db.prepare("SELECT value FROM auth WHERE user_id=? AND key='creds'").get(user) as { value: string } | undefined;
-  const me = auth ? (JSON.parse(auth.value) as { me?: { id?: string; lid?: string } }).me : undefined;
+  const me = identity || (auth ? (JSON.parse(auth.value) as { me?: { id?: string; lid?: string } }).me : undefined);
   const mine = stored ? !!stored.mine : !!sender && [me?.id, me?.lid].some((id) => id && areJidsSameUser(id, sender));
   const senderId = sender ? jidNormalizedUser(sender) : undefined;
   const author = mine ? "Você" : (senderId && contactName(user, senderId)) || original?.pushName ||

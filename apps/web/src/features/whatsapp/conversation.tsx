@@ -17,6 +17,7 @@ export function Conversation({
   chatId,
   userId,
   backup,
+  backupNumber,
   chats,
   onStartConversation,
   onRead,
@@ -24,12 +25,13 @@ export function Conversation({
   chatId: string;
   userId?: string;
   backup: boolean;
+  backupNumber?: string;
   chats: Chat[];
   onStartConversation: (contact: SharedContact) => void;
   onRead: () => void;
 }) {
   const { api, post, put, path: accountPath } = useWhatsAppApi();
-  const path = `/whatsapp/messages?chatId=${encodeURIComponent(chatId)}${userId ? `&userId=${userId}` : ""}`;
+  const path = `/whatsapp/${backup ? `backup/messages?number=${encodeURIComponent(backupNumber || "")}&` : "messages?"}chatId=${encodeURIComponent(chatId)}${userId ? `&userId=${userId}` : ""}`;
   const result = useResource<Message[]>(path, backup ? undefined : 4000);
   const [older, setOlder] = useState<Message[]>([]);
   const [reply, setReply] = useState<Message>();
@@ -179,9 +181,9 @@ export function Conversation({
               )}
               {m.reply && m.kind !== "deleted" && (
                 <MessageReply
-                  reply={messages.some((message) => message.id === m.reply!.id && message.kind === "deleted")
-                    ? { ...m.reply, kind: "deleted", text: "Mensagem apagada", thumbnail: undefined }
-                    : m.reply}
+                  reply={{ ...m.reply, ...(backup ? { thumbnail: undefined } : {}),
+                    ...(messages.some((message) => message.id === m.reply!.id && message.kind === "deleted")
+                      ? { kind: "deleted", text: "Mensagem apagada", thumbnail: undefined } : {}) }}
                   onNavigate={messages.some((message) => message.id === m.reply!.id) ? () => {
                     messageElements.current.get(m.reply!.id)?.scrollIntoView({ behavior: "smooth", block: "center" });
                   } : undefined}
@@ -193,23 +195,24 @@ export function Conversation({
                   <span>Mensagem apagada</span>
                 </div>
               )}
-              {m.kind !== "text" && m.kind !== "deleted" && !m.contact && (
+              {!backup && m.kind !== "text" && m.kind !== "deleted" && !m.contact && (
                 <MessageAttachment
                   message={m}
                   userId={userId}
                   onError={setError}
                 />
               )}
+              {backup && m.mediaLabel && <p className="form-note">{m.mediaLabel} · mídia não incluída no backup</p>}
               {m.contact && (
                 <div className="message-contact-card">
                   <Avatar
                     name={m.contact.name}
-                    src={m.contact.phone ? `/api${accountPath(`/whatsapp/profile-picture?chatId=${encodeURIComponent(m.contact.phone.replace(/\D/g, "") + "@s.whatsapp.net")}${userId ? `&userId=${encodeURIComponent(userId)}` : ""}`)}` : undefined}
+                    src={!backup && m.contact.phone ? `/api${accountPath(`/whatsapp/profile-picture?chatId=${encodeURIComponent(m.contact.phone.replace(/\D/g, "") + "@s.whatsapp.net")}${userId ? `&userId=${encodeURIComponent(userId)}` : ""}`)}` : undefined}
                   />
                   <strong>{m.contact.name}</strong>
                 </div>
               )}
-              {!!m.text && m.kind !== "sticker" && m.kind !== "deleted" && !m.contact && (
+              {!!m.text && (backup || m.kind !== "sticker") && m.kind !== "deleted" && !m.contact && (
                 <MessageText
                   text={m.text}
                   onStartConversation={backup ? undefined : onStartConversation}
@@ -277,7 +280,7 @@ export function Conversation({
       ) : (
         <p className="form-note">
           {backup
-            ? "Consulta ao histórico persistido. Anexos dependem da disponibilidade na sessão de origem."
+            ? "Consulta às mensagens deste número. Mídias não fazem parte do backup."
             : "Esta conversa está disponível somente para consulta. Para atender, utilize o contato com telefone identificado."}
         </p>
       )}

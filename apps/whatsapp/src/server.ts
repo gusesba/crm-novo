@@ -10,9 +10,11 @@ import { reconcileEncryptedEdits } from "./storage/encrypted-edits.js";
 import { deleteStoredMessage, saveMessage } from "./storage/messages.js";
 import { runMediaRetention } from "./storage/media-storage.js";
 import { stopMediaCaching } from "./messaging/media.js";
+import { initializeBackups } from "./storage/backups.js";
 
 const app = Fastify({ logger: true, bodyLimit: 24_000_000 });
 reconcileEncryptedEdits(saveMessage, deleteStoredMessage);
+initializeBackups();
 app.addHook("onRequest", async (req, reply) => {
   if (req.url === "/health") return;
   const supplied = Buffer.from(String(req.headers["x-service-key"] || ""));

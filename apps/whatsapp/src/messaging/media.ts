@@ -6,6 +6,7 @@ import {
 import pino from "pino";
 import { connectedSocket } from "../sessions/manager.js";
 import { rawMessage } from "../storage/messages.js";
+import { sessionNumber } from "../storage/backups.js";
 import {
   removeStoredMedia,
   shouldStoreMedia,
@@ -14,6 +15,7 @@ import {
 } from "../storage/media-storage.js";
 
 export async function media(user: string, id: string) {
+  const sourceNumber = sessionNumber(user);
   const message = rawMessage(user, id);
   if (!message)
     throw Object.assign(new Error("Anexo não encontrado."), {
@@ -61,6 +63,8 @@ export async function media(user: string, id: string) {
   const data = Buffer.concat(chunks);
   const mime = attachment.mimetype || "application/octet-stream";
   const name = (attachment as { fileName?: string }).fileName || "anexo";
+  if (sourceNumber && sourceNumber !== sessionNumber(user))
+    throw Object.assign(new Error("O número da conta mudou durante o download."), { statusCode: 409 });
   storeMedia(
     user,
     id,
