@@ -2,7 +2,8 @@
 import { useApp } from "@/components/providers";
 import { Avatar, Empty } from "@/components/ui";
 import type { Named, User } from "@/lib/types";
-import { Building2, Pencil, Plus, Settings2 } from "lucide-react";
+import { Building2, HardDrive, Pencil, Plus, Settings2 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { SettingsForm } from "./settings-form";
 import {
@@ -37,6 +38,7 @@ export function SettingsPage() {
             </button>
           ))}
         </div>
+        {!user.branchId && <Link className="button secondary" href="/settings/media"><HardDrive size={17} />Mídia e armazenamento</Link>}
         {canManage && !(user.branchId && tab === "branches") && (
           <button
             className="button primary"

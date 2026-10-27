@@ -265,6 +265,8 @@ function CampaignPreview({ messages }: { messages: CampaignMessageDraft[] }) {
 }
 
 export function CampaignAttachmentPreview({ attachment }: { attachment: Attachment }) {
+  if (attachment.removed)
+    return <div className="campaign-preview-attachment"><FileText size={18} /><span>{attachment.name} · Arquivo removido pela limpeza de mídia</span></div>;
   const source = `data:${attachment.mime};base64,${attachment.data}`;
   if (attachment.mime === "image/webp")
     return (

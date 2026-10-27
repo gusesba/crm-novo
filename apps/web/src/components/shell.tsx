@@ -70,7 +70,7 @@ export function Shell({ children }: { children: ReactNode }) {
       </div>
     );
   if (!user) return null;
-  const active = navigation.find((x) => x.href === path);
+  const active = navigation.find((x) => x.href === path || path.startsWith(`${x.href}/`));
   return (
     <div className="app-shell">
       {mobile && (
@@ -114,12 +114,12 @@ export function Shell({ children }: { children: ReactNode }) {
                 )}
                 <Link
                   onClick={() => setMobile(false)}
-                  className={`nav-item ${path === item.href ? "active" : ""}`}
+                  className={`nav-item ${active?.href === item.href ? "active" : ""}`}
                   href={item.href}
                 >
                   <item.icon size={19} />
                   <span>{item.label}</span>
-                  {path === item.href && <span className="nav-active-dot" />}
+                  {active?.href === item.href && <span className="nav-active-dot" />}
                 </Link>
               </div>
             ))}

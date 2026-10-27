@@ -25,6 +25,7 @@ import { profilePicture } from "./messaging/profile-picture.js";
 import { archiveChat } from "./messaging/archive-chat.js";
 import { readChat } from "./messaging/read-chat.js";
 import { listChats } from "./storage/chat-states.js";
+import { cleanupMedia, mediaCleanupPreview, mediaCleanupSchema, mediaSettingsSchema, mediaStorageStatus, saveMediaSettings } from "./storage/media-storage.js";
 import {
   campaignDeliveries,
   campaignMessages,
@@ -34,6 +35,13 @@ import {
 } from "./campaigns/worker.js";
 
 export async function registerRoutes(app: FastifyInstance) {
+  app.get("/media-storage", async () => mediaStorageStatus());
+  app.put("/media-storage/settings", async (req) => saveMediaSettings(mediaSettingsSchema.parse(req.body)));
+  app.post("/media-storage/cleanup-preview", async (req) => mediaCleanupPreview(mediaCleanupSchema.parse(req.body).days));
+  app.post("/media-storage/cleanup", async (req) => {
+    const body = mediaCleanupSchema.extend({ confirmed: z.literal(true) }).parse(req.body);
+    return cleanupMedia(body.days);
+  });
   const params = z.object({
     user: z.string().regex(/^\d+$/),
     id: z.string().max(200).optional(),

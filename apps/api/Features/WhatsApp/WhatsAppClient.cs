@@ -17,9 +17,15 @@ public class WhatsAppClient(HttpClient http)
         return (await response.Content.ReadAsByteArrayAsync(), contentType);
     }
 
-    public async Task<JsonElement> Send(int userId, HttpMethod method, string path, object? body = null)
+    public Task<JsonElement> Send(int userId, HttpMethod method, string path, object? body = null)
+        => SendPath($"/sessions/{userId}/{path}", method, body);
+
+    public Task<JsonElement> SendGlobal(HttpMethod method, string path, object? body = null)
+        => SendPath($"/{path}", method, body);
+
+    private async Task<JsonElement> SendPath(string path, HttpMethod method, object? body)
     {
-        using var request = new HttpRequestMessage(method, $"/sessions/{userId}/{path}");
+        using var request = new HttpRequestMessage(method, path);
         if (body != null) request.Content = JsonContent.Create(body);
         using var response = await http.SendAsync(request);
         var json = await response.Content.ReadAsStringAsync();

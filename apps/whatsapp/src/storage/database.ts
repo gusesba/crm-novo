@@ -20,6 +20,10 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS messages_stickers ON messages(user_id,kind,timestamp DESC);
   CREATE TABLE IF NOT EXISTS message_reactions (user_id TEXT, message_id TEXT, sender TEXT, emoji TEXT, PRIMARY KEY(user_id,message_id,sender));
   CREATE TABLE IF NOT EXISTS profile_pictures (user_id TEXT, chat_id TEXT, mime TEXT, data BLOB, updated_at INTEGER, PRIMARY KEY(user_id,chat_id));
+  CREATE TABLE IF NOT EXISTS media_cache (user_id TEXT, message_id TEXT, mime TEXT, name TEXT, data BLOB NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY(user_id,message_id));
+  CREATE INDEX IF NOT EXISTS media_cache_age ON media_cache(created_at);
+  CREATE TABLE IF NOT EXISTS media_settings (id INTEGER PRIMARY KEY CHECK(id=1), retention_enabled INTEGER NOT NULL DEFAULT 0, retention_days INTEGER NOT NULL DEFAULT 30, purged_before INTEGER NOT NULL DEFAULT 0);
+  INSERT OR IGNORE INTO media_settings(id) VALUES(1);
   CREATE TABLE IF NOT EXISTS campaigns (id TEXT PRIMARY KEY, user_id TEXT, payload TEXT, status TEXT, sent INTEGER DEFAULT 0, failed INTEGER DEFAULT 0, skipped INTEGER DEFAULT 0, error TEXT, created_at INTEGER);
   CREATE TABLE IF NOT EXISTS campaign_deliveries (
     campaign_id TEXT NOT NULL,

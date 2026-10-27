@@ -9,6 +9,7 @@ import { conversationName, savePushName } from "./contacts.js";
 import { messageReply } from "./message-replies.js";
 import { messageMetadata, preserveMessageSecret, type StoredMessage } from "./message-metadata.js";
 import { queueEncryptedEdit, replayEncryptedEdits } from "./encrypted-edits.js";
+import { removeStoredMedia } from "./media-storage.js";
 
 export function saveMessage(user: string, msg: WAMessage) {
   const jid = messageChatId(msg);
@@ -333,6 +334,7 @@ export function saveMessageReaction(
 export function markMessageDeleted(user: string, id: string, chatId: string) {
   const original = rawMessage(user, id);
   if (!original || messageChatId(original) !== chatId) return false;
+  removeStoredMedia(user, id);
   const raw = JSON.stringify(
     {
       key: original.key,
@@ -361,6 +363,7 @@ export function deleteStoredMessage(user: string, id: string, chatId: string) {
     .prepare("SELECT 1 FROM messages WHERE user_id=? AND id=? AND chat_id=?")
     .get(user, id, chatId);
   if (!stored) return false;
+  removeStoredMedia(user, id);
   db.prepare(
     "DELETE FROM message_reactions WHERE user_id=? AND message_id=?",
   ).run(user, id);

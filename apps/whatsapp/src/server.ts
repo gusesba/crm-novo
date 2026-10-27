@@ -8,6 +8,8 @@ import { stopCampaigns } from "./campaigns/worker.js";
 import { db } from "./storage/database.js";
 import { reconcileEncryptedEdits } from "./storage/encrypted-edits.js";
 import { deleteStoredMessage, saveMessage } from "./storage/messages.js";
+import { runMediaRetention } from "./storage/media-storage.js";
+import { stopMediaCaching } from "./messaging/media.js";
 
 const app = Fastify({ logger: true, bodyLimit: 24_000_000 });
 reconcileEncryptedEdits(saveMessage, deleteStoredMessage);
@@ -37,9 +39,15 @@ app.setErrorHandler((error, req, reply) => {
 app.get("/health", async () => ({ status: "ok" }));
 await registerRoutes(app);
 await app.listen({ host: config.host, port: config.port });
+const cleanup = () => { try { runMediaRetention(); } catch (error) { app.log.error(error, "Media retention failed"); } };
+cleanup();
+const mediaRetentionTimer = setInterval(cleanup, 60 * 60 * 1000);
+mediaRetentionTimer.unref();
 void restoreSessions();
 for (const signal of ["SIGTERM", "SIGINT"] as const)
   process.once(signal, async () => {
+    clearInterval(mediaRetentionTimer);
+    stopMediaCaching();
     const draining = stopCampaigns();
     stopSessions();
     await app.close();

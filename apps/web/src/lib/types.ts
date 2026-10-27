@@ -132,6 +132,7 @@ export interface Attachment {
   data: string;
   voiceNote?: boolean;
   asDocument?: boolean;
+  removed?: boolean;
 }
 export interface SharedContact {
   name: string;

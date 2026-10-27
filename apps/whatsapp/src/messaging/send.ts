@@ -1,10 +1,8 @@
 import {
-  downloadMediaMessage,
   normalizeMessageContent,
   type AnyMessageContent,
   type WASocket,
 } from "@whiskeysockets/baileys";
-import pino from "pino";
 import { convertVoiceNote } from "./voice-note.js";
 import { connectedSocket } from "../sessions/manager.js";
 import {
@@ -17,6 +15,8 @@ import {
 } from "../storage/messages.js";
 import { messageAttachments, type SendInput } from "./schemas.js";
 import { messageContext, messageMetadata, preserveMessageSecret } from "../storage/message-metadata.js";
+import { storeMedia } from "../storage/media-storage.js";
+export { media } from "./media.js";
 
 export async function sendMessage(
   user: string,
@@ -134,6 +134,11 @@ async function sendSingleMessage(user: string, input: SendInput, socket: Pick<WA
   const result = await socket.sendMessage(input.chatId, content, { quoted });
   if (!result?.key.id) throw new Error("O WhatsApp não confirmou o envio.");
   saveMessage(user, result);
+  if (input.attachment) {
+    const file = input.attachment;
+    const data = file.voiceNote ? (content as { audio: Buffer }).audio : Buffer.from(file.data, "base64");
+    storeMedia(user, result.key.id, { name: file.name, mime: file.voiceNote ? "audio/ogg; codecs=opus" : file.mime, data }, Number(result.messageTimestamp || Math.floor(Date.now() / 1000)) * 1000);
+  }
   // Áudios não aceitam legenda: enviar o texto como mensagem separada.
   if (input.attachment?.mime.startsWith("audio/") && !input.attachment.asDocument && input.text?.trim()) {
     const caption = await socket.sendMessage(input.chatId, {
@@ -241,47 +246,4 @@ function conversationMessage(user: string, id: string, chatId: string) {
       statusCode: 404,
     });
   return message;
-}
-export async function media(user: string, id: string) {
-  const message = rawMessage(user, id);
-  if (!message)
-    throw Object.assign(new Error("Anexo não encontrado."), {
-      statusCode: 404,
-    });
-  const content = normalizeMessageContent(message.message);
-  const attachment =
-    content?.imageMessage ||
-    content?.videoMessage ||
-    content?.audioMessage ||
-    content?.documentMessage ||
-    content?.stickerMessage;
-  if (!attachment)
-    throw Object.assign(new Error("Mensagem sem anexo."), { statusCode: 400 });
-  if (attachment.url === "https://a.whatsapp.net") attachment.url = null;
-  const stream = await downloadMediaMessage(
-    message,
-    "stream",
-    {},
-    {
-      logger: pino({ level: "silent" }),
-      reuploadRequest: connectedSocket(user).updateMediaMessage,
-    },
-  );
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of stream) {
-    size += chunk.length;
-    if (size > 16 * 1024 * 1024) {
-      stream.destroy();
-      throw Object.assign(new Error("Anexo maior que 16 MB."), {
-        statusCode: 413,
-      });
-    }
-    chunks.push(chunk);
-  }
-  return {
-    data: Buffer.concat(chunks).toString("base64"),
-    mime: attachment.mimetype || "application/octet-stream",
-    name: (attachment as { fileName?: string }).fileName || "anexo",
-  };
 }

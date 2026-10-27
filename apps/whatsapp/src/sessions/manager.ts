@@ -23,6 +23,7 @@ import {
 } from "../storage/contacts.js";
 import { backfillChatStates, saveChatState } from "../storage/chat-states.js";
 import { syncReadEvents } from "./read-sync.js";
+import { cacheIncomingMedia } from "../messaging/media.js";
 
 type Session = {
   socket?: WASocket;
@@ -119,7 +120,10 @@ export async function connect(user: string) {
     }
   });
   socket.ev.on("messages.upsert", (event) => {
-    for (const message of event.messages) saveMessage(user, message);
+    for (const message of event.messages) {
+      saveMessage(user, message);
+      if (event.type === "notify") cacheIncomingMedia(user, message);
+    }
   });
   syncReadEvents(user, socket, state);
   socket.ev.on("messaging-history.set", (event) => {
