@@ -368,7 +368,7 @@ Fontes: [lead-conversation-button.tsx](../apps/web/src/features/leads/lead-conve
 
 ### 7.1 Botão Conversa no lead
 
-1. Vendedor atual clica “Conversa” → consulta `GET /api/whatsapp/accounts`. Com uma conta, usa Principal; com várias, abre modal para escolher pelo nome. Cancelar fecha sem resolver/vincular. A escolha faz `POST /api/leads/{id}/conversation?accountId={conta}`:
+1. Vendedor atual clica “Conversa” → consulta `GET /api/whatsapp/accounts`. Com uma conta, usa Principal; com várias, abre modal com o nome do lead na descrição e as contas em uma lista vertical de botões de largura inteira, com quebra de nomes longos (layout revisado em **27/10/2026**). Cancelar, fechar ou Escape fecha sem resolver/vincular. A escolha faz `POST /api/leads/{id}/conversation?accountId={conta}`:
 
 ```json
 { "revision": 4, "acceptedPhone": null }

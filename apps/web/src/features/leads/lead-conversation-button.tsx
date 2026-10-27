@@ -4,6 +4,7 @@ import type { WhatsAppAccount } from "@/lib/whatsapp-account";
 import { useApp } from "@/components/providers";
 import { ErrorBox, Modal } from "@/components/ui";
 import type { Lead } from "@/lib/types";
+import { ChevronRight, MessageCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createPortal } from "react-dom";
@@ -76,10 +77,31 @@ export function LeadConversationButton({ lead, className = "text-button" }: { le
         {error && <ErrorBox message={error} />}
       </span>
       {accounts && createPortal(
-        <Modal title="Escolher conta WhatsApp" onClose={() => setAccounts(undefined)}>
+        <Modal
+          title="Escolher conta WhatsApp"
+          description={`Qual conta deseja usar para conversar com ${lead.name}?`}
+          onClose={() => setAccounts(undefined)}
+        >
           <div className="modal-form">
-            <p>Qual conta deseja usar para conversar com {lead.name}?</p>
-            {accounts.map((account) => <button key={account.id} type="button" className="button secondary" onClick={() => void open(undefined, account.id)}>{account.name}</button>)}
+            <div className="conversation-account-list">
+              {accounts.map((account) => (
+                <button
+                  key={account.id}
+                  type="button"
+                  className="button secondary conversation-account-option"
+                  onClick={() => void open(undefined, account.id)}
+                >
+                  <MessageCircle size={20} aria-hidden="true" />
+                  <span>{account.name}</span>
+                  <ChevronRight size={18} aria-hidden="true" />
+                </button>
+              ))}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="button secondary" onClick={() => setAccounts(undefined)}>
+                Cancelar
+              </button>
+            </div>
           </div>
         </Modal>, document.body,
       )}

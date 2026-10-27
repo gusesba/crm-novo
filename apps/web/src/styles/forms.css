@@ -72,6 +72,27 @@
 .modal-form {
   padding: 24px 27px;
 }
+.conversation-account-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.conversation-account-option {
+  width: 100%;
+  justify-content: flex-start;
+  min-height: 56px;
+  text-align: left;
+  white-space: normal;
+}
+.conversation-account-option > svg {
+  flex-shrink: 0;
+  color: var(--green);
+}
+.conversation-account-option > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .modal-footer {
   display: flex;
   justify-content: flex-end;
