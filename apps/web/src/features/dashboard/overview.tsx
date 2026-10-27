@@ -4,8 +4,7 @@ import { ErrorBox, Loading } from "@/components/ui";
 import { LeadForm } from "@/features/leads/lead-form";
 import { useResource } from "@/hooks/use-resource";
 import type { Appointment, DashboardData, PageResult } from "@/lib/types";
-import { ArrowRight, CalendarDays, Plus, Sparkles } from "lucide-react";
-import Link from "next/link";
+import { CalendarDays, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ActivityChart } from "./activity-chart";
@@ -147,22 +146,6 @@ export function Overview() {
           <div className="dashboard-bottom">
             <SellerRanking d={d} />
             <AgendaCard agenda={agenda} branch={branch} />
-          </div>
-          <div className="insight-banner">
-            <span>
-              <Sparkles size={20} />
-            </span>
-            <div>
-              <strong>Seu próximo resultado começa com uma conversa.</strong>
-              <p>
-                Mantenha os retornos em dia e transforme interesse em novas
-                matrículas.
-              </p>
-            </div>
-            <Link href="/my-leads">
-              Cuidar dos meus leads
-              <ArrowRight size={16} />
-            </Link>
           </div>
         </>
       )}

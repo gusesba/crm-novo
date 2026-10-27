@@ -1,7 +1,6 @@
 "use client";
 import {
   ArrowLeftRight,
-  ArrowUpRight,
   Building2,
   CalendarDays,
   ChartNoAxesCombined,
@@ -121,13 +120,6 @@ export function Shell({ children }: { children: ReactNode }) {
             ))}
         </nav>
         <div className="sidebar-bottom">
-          <div className="support-card">
-            <span className="support-symbol">
-              <ArrowUpRight size={20} />
-            </span>
-            <strong>Cada conversa, um novo caminho.</strong>
-            <p>Relacionamentos que levam mais longe.</p>
-          </div>
           <button
             className="profile"
             onClick={() => void logout()}
@@ -169,14 +161,6 @@ export function Shell({ children }: { children: ReactNode }) {
           </div>
         </header>
         <main className="main-content">{children}</main>
-        <footer className="app-footer">
-          <span>
-            as crm <span>·</span> Feito para conectar caminhos.
-          </span>
-          <span>
-            <span className="online-dot" /> Ambiente de trabalho
-          </span>
-        </footer>
       </div>
     </div>
   );

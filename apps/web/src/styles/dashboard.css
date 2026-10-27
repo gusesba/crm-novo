@@ -330,43 +330,6 @@
   border-top: 1px solid var(--line);
   padding: 12px;
 }
-.insight-banner {
-  display: flex;
-  gap: 13px;
-  align-items: center;
-  padding: 17px 23px;
-  background: #edf2e9;
-  border: 1px solid #e0e8da;
-  border-radius: 11px;
-}
-.insight-banner > span {
-  width: 33px;
-  height: 33px;
-  border-radius: 9px;
-  background: #e3ecd9;
-  display: grid;
-  place-items: center;
-  color: #8ca179;
-}
-.insight-banner strong {
-  font-size: 11px;
-  font-weight: 550;
-  color: #647958;
-}
-.insight-banner p {
-  font-size: 9px;
-  color: #9aab8f;
-  margin-top: 4px;
-}
-.insight-banner > a {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 9px;
-  margin-left: auto;
-  color: #72895d;
-  white-space: nowrap;
-}
 @media (min-width: 1500px) {
   .chart-container {
     height: 255px;
@@ -416,9 +379,6 @@
   .seller-table .rank {
     display: none;
   }
-  .insight-banner > a {
-    font-size: 8px;
-  }
 }
 @media (max-width: 1050px) {
   .stats-grid {
@@ -442,12 +402,6 @@
   }
   .seller-table td {
     padding: 16px 23px;
-  }
-  .insight-banner {
-    flex-wrap: wrap;
-  }
-  .insight-banner > a {
-    margin-left: 46px;
   }
 }
 @media (max-width: 560px) {
@@ -481,15 +435,6 @@
   }
   .panel-heading h2 {
     font-size: 13px;
-  }
-  .insight-banner {
-    padding: 16px;
-  }
-  .insight-banner > div {
-    flex: 1;
-  }
-  .insight-banner p {
-    line-height: 1.7;
   }
   .seller-table td {
     padding: 13px;

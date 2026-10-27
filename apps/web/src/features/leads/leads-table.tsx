@@ -15,6 +15,7 @@ export function LeadsTable({
   sort,
   onSort,
   showOriginalSeller = false,
+  showClassifications = true,
 }: {
   items: Lead[];
   user: User | null;
@@ -25,6 +26,7 @@ export function LeadsTable({
   sort: string;
   onSort: (sort: string) => void;
   showOriginalSeller?: boolean;
+  showClassifications?: boolean;
 }) {
   function sortHeader(label: string, field: "name" | "value" | "created") {
     const active = sort.startsWith(`${field}_`);
@@ -65,7 +67,7 @@ export function LeadsTable({
             {sortHeader("CLIENTE", "name")}
             <th>SERVIÇO / ORIGEM</th>
             <th>STATUS</th>
-            <th>CLASSIFICAÇÕES</th>
+            {showClassifications && <th>CLASSIFICAÇÕES</th>}
             {showOriginalSeller && <th>VENDEDOR ORIGINAL</th>}
             <th>VENDEDOR ATUAL</th>
             {sortHeader("VALOR", "value")}
@@ -116,22 +118,24 @@ export function LeadsTable({
               <td>
                 <Badge status={l.status} />
               </td>
-              <td>
-                {l.classifications?.length ? (
-                  <div className="lead-classification-list">
-                    {l.classifications.map((item) => (
-                      <span
-                        key={item.id}
-                        className="badge lead-classification-badge"
-                        style={{ backgroundColor: `${item.color}22`, borderColor: `${item.color}66` }}
-                      >
-                        <i style={{ backgroundColor: item.color }} aria-hidden="true" />
-                        {item.name}
-                      </span>
-                    ))}
-                  </div>
-                ) : <span className="muted" aria-label="Sem classificação">—</span>}
-              </td>
+              {showClassifications && (
+                <td>
+                  {l.classifications?.length ? (
+                    <div className="lead-classification-list">
+                      {l.classifications.map((item) => (
+                        <span
+                          key={item.id}
+                          className="badge lead-classification-badge"
+                          style={{ backgroundColor: `${item.color}22`, borderColor: `${item.color}66` }}
+                        >
+                          <i style={{ backgroundColor: item.color }} aria-hidden="true" />
+                          {item.name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : <span className="muted" aria-label="Sem classificação">—</span>}
+                </td>
+              )}
               {showOriginalSeller && (
                 <td>
                   <div className="person-cell">

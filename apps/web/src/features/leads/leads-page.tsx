@@ -324,6 +324,7 @@ export function LeadsPage({
               setPage(1);
             }}
             showOriginalSeller={mode === "transferred"}
+            showClassifications={mode !== "all"}
           />
         )}
         <div className="table-pagination">
