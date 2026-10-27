@@ -94,6 +94,7 @@ export interface Chat {
   pinnedAt: number;
   unreadCount?: number;
   markedUnread?: boolean;
+  contactSaved?: boolean;
   leadId?: number | null;
   leadStatus?: string | null;
   classifications?: LeadClassification[];

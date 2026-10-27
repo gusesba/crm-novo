@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { Connection } from "./connection";
 import { Conversation } from "./conversation";
 import { ChatList } from "./chat-list";
+import { ContactButton, ContactForm } from "./contact-form";
 
 export function ChatPage({ backup = false }: { backup?: boolean }) {
   const { user, catalog, notify } = useApp();
@@ -25,6 +26,7 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
   const [views, setViews] = useState<ChatView[]>(["whatsapp"]);
   const [create, setCreate] = useState(false);
   const [editingLead, setEditingLead] = useState<Lead>();
+  const [contactChatId, setContactChatId] = useState<string>();
   const [error, setError] = useState("");
   const [archiving, setArchiving] = useState(false);
   const [phoneVariant, setPhoneVariant] = useState<{ original: string; phone: string; chat: Chat }>();
@@ -242,7 +244,7 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
               </button>
               <div>
                 <div className="chat-top-name">
-                  <h3>{linkedLead?.name || chat.name.split("@")[0]}</h3>
+                  <h3>{linkedLead?.name || selectedChat?.name || chat.name.split("@")[0]}</h3>
                   {selectedLeadStatus && <Badge status={selectedLeadStatus} />}
                 </div>
                 <p>
@@ -250,6 +252,7 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
                   {linkedLead ? "· Vinculado ao CRM" : ""}
                 </p>
               </div>
+              <ContactButton chatId={chat.id} backup={backup} saved={!!(selectedChat?.contactSaved || chat.contactSaved)} onClick={() => setContactChatId(chat.id)} />
               {!backup && selectedChat && (
                 <button
                   type="button"
@@ -315,6 +318,13 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
           </div>
         )}
       </section>
+      {contactChatId && !backup && (
+        <ContactForm key={contactChatId} chatId={contactChatId} linkedLead={!!(linkedLead || selectedChat?.leadId)} onClose={() => setContactChatId(undefined)} onSaved={(contact) => {
+          setContactChatId(undefined);
+          setChat((current) => current?.id === contact.chatId ? { ...current, name: current.leadId ? current.name : contact.fullName, contactSaved: true } : current);
+          chats.reload();
+        }} />
+      )}
       {profilePhoto && (
         <Modal
           title={`Foto de perfil · ${profilePhoto.name}`}

@@ -10,6 +10,7 @@ db.exec(`
   PRAGMA busy_timeout=5000;
   CREATE TABLE IF NOT EXISTS auth (user_id TEXT, key TEXT, value TEXT, PRIMARY KEY(user_id,key));
   CREATE TABLE IF NOT EXISTS contacts (user_id TEXT, id TEXT, name TEXT, priority INTEGER, PRIMARY KEY(user_id,id));
+  CREATE TABLE IF NOT EXISTS contact_names (user_id TEXT, id TEXT, first_name TEXT, last_name TEXT, full_name TEXT, PRIMARY KEY(user_id,id));
   CREATE TABLE IF NOT EXISTS service_state (user_id TEXT, key TEXT, value TEXT, PRIMARY KEY(user_id,key));
   CREATE TABLE IF NOT EXISTS chats (user_id TEXT, id TEXT, name TEXT, last_text TEXT, updated_at INTEGER, PRIMARY KEY(user_id,id));
   CREATE TABLE IF NOT EXISTS chat_states (user_id TEXT, id TEXT, archived INTEGER NOT NULL DEFAULT 0, pinned_at INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(user_id,id));

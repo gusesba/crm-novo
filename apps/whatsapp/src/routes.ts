@@ -25,6 +25,7 @@ import { profilePicture } from "./messaging/profile-picture.js";
 import { archiveChat } from "./messaging/archive-chat.js";
 import { readChat } from "./messaging/read-chat.js";
 import { listChats } from "./storage/chat-states.js";
+import { contactChatSchema, getContact, saveContactSchema, saveWhatsAppContact } from "./messaging/contacts.js";
 import { cleanupMedia, mediaCleanupPreview, mediaCleanupSchema, mediaSettingsSchema, mediaStorageStatus, saveMediaSettings } from "./storage/media-storage.js";
 import {
   campaignDeliveries,
@@ -46,6 +47,11 @@ export async function registerRoutes(app: FastifyInstance) {
     user: z.string().regex(/^\d+$/),
     id: z.string().max(200).optional(),
   });
+  app.get("/sessions/:user/contacts", async (req) => {
+    const { chatId } = z.object({ chatId: contactChatSchema }).parse(req.query);
+    return getContact(params.parse(req.params).user, chatId);
+  });
+  app.put("/sessions/:user/contacts", async (req) => saveWhatsAppContact(params.parse(req.params).user, saveContactSchema.parse(req.body)));
   app.get("/sessions/:user/status", async (req) =>
     sessionStatus(params.parse(req.params).user),
   );

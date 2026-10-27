@@ -35,8 +35,11 @@ export function saveContact(user: string, contact: Partial<Contact>) {
   if (!candidate) return;
   for (const id of new Set(
     [contact.id, contact.phoneNumber, contact.lid].filter(Boolean) as string[],
-  ))
+  )) {
+    if (contact.name?.trim() && !id.endsWith("@g.us"))
+      db.prepare("UPDATE contacts SET priority=3 WHERE user_id=? AND id=? AND priority=5").run(user, id);
     saveName(user, id, candidate.value, candidate.priority);
+  }
 }
 
 export function savePushName(user: string, id: string, name?: string | null) {
@@ -48,7 +51,7 @@ export function saveConversationName(
   id: string,
   name?: string | null,
 ) {
-  if (name) saveName(user, id, name, 5);
+  if (name) saveName(user, id, name, id.endsWith("@g.us") ? 5 : 3);
 }
 
 export function contactName(user: string, id: string): string | undefined {

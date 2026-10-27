@@ -16,6 +16,12 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
     [HttpPost("disconnect")] public Task<JsonElement> Disconnect() => client.Send(current.Id, HttpMethod.Post, "disconnect");
     [HttpPost("resolve-phone")]
     public Task<JsonElement> ResolvePhone(ResolvePhoneRequest r) => client.Send(current.Id, HttpMethod.Post, "resolve-phone", r);
+    [HttpGet("contacts")]
+    public Task<JsonElement> Contact([Required, RegularExpression(@"^\d{10,15}@s\.whatsapp\.net$")] string chatId)
+        => client.Send(current.Id, HttpMethod.Get, $"contacts?chatId={Uri.EscapeDataString(chatId)}");
+    [HttpPut("contacts")]
+    public Task<JsonElement> SaveContact(WhatsAppContactRequest r)
+        => client.Send(current.Id, HttpMethod.Put, "contacts", new { r.ChatId, firstName = r.FirstName.Trim(), lastName = (r.LastName ?? "").Trim() });
     [HttpPut("chats/archive")]
     public Task<JsonElement> ArchiveChat(ArchiveChatRequest r) => client.Send(current.Id, HttpMethod.Put, "chats/archive", r);
     [HttpPut("chats/read")]
@@ -53,6 +59,7 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
                 pinnedAt = chat.GetProperty("pinnedAt").GetInt64(),
                 unreadCount = chat.TryGetProperty("unreadCount", out var unread) && unread.ValueKind == JsonValueKind.Number && unread.TryGetInt32(out var count) ? Math.Max(0, count) : 0,
                 markedUnread = chat.TryGetProperty("markedUnread", out var marked) && marked.ValueKind == JsonValueKind.Number && marked.TryGetInt32(out var flag) && flag != 0,
+                contactSaved = chat.TryGetProperty("contactSaved", out var saved) && saved.ValueKind == JsonValueKind.Number && saved.TryGetInt32(out var savedFlag) && savedFlag != 0,
                 leadId = lead?.Id,
                 leadStatus = lead?.Status,
                 classifications = classificationsByLead[lead?.Id ?? 0].Select(x => new { x.Id, x.Name, x.Color })
@@ -221,6 +228,8 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
 public record AttachmentRequest(string Name, string Mime, string Data, bool VoiceNote = false, bool AsDocument = false);
 public record ContactRequest(string Name, string Phone);
 public record ResolvePhoneRequest([Required, RegularExpression(@"^\d{10,15}$")] string Phone);
+public record WhatsAppContactRequest([Required, RegularExpression(@"^\d{10,15}@s\.whatsapp\.net$")] string ChatId,
+    [Required, MaxLength(80)] string FirstName, [MaxLength(80)] string? LastName = null);
 public record ArchiveChatRequest([Required, MaxLength(100), RegularExpression(@"^[^@\s]+@(s\.whatsapp\.net|g\.us|lid)$")] string ChatId, [Required] bool? Archived);
 public record ReadChatRequest([Required, MaxLength(100), RegularExpression(@"^[^@\s]+@(s\.whatsapp\.net|g\.us|lid)$")] string ChatId,
     [Required, MaxLength(200)] string LastMessageId);

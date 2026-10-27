@@ -146,7 +146,8 @@ export function listChats(user: string) {
               c.updated_at AS updatedAt,
               COALESCE(s.archived,0) AS archived,COALESCE(s.pinned_at,0) AS pinnedAt,
               MAX(COALESCE(s.unread_count,0),0) AS unreadCount,
-              COALESCE(s.unread_count,0)<0 AS markedUnread
+              COALESCE(s.unread_count,0)<0 AS markedUnread,
+              EXISTS(SELECT 1 FROM contacts contact WHERE contact.user_id=c.user_id AND contact.id=c.id AND contact.priority>=4) AS contactSaved
        FROM chats c LEFT JOIN chat_states s ON s.user_id=c.user_id AND s.id=c.id
        WHERE c.user_id=? AND (COALESCE(s.archived,0)=1 OR c.id IN active)
        ORDER BY COALESCE(s.archived,0) ASC,
