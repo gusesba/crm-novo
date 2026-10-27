@@ -4,6 +4,7 @@ import { db } from "./storage/database.js";
 import { listMessages, listRecentStickers } from "./storage/messages.js";
 import { connect, connectedSocket, disconnect, sessionStatus } from "./sessions/manager.js";
 import { resolvePhone } from "./messaging/resolve-phone.js";
+import { sessionIdSchema } from "./sessions/session-id.js";
 import {
   archiveChatSchema,
   campaignSchema,
@@ -44,7 +45,7 @@ export async function registerRoutes(app: FastifyInstance) {
     return cleanupMedia(body.days);
   });
   const params = z.object({
-    user: z.string().regex(/^\d+$/),
+    user: sessionIdSchema,
     id: z.string().max(200).optional(),
   });
   app.get("/sessions/:user/contacts", async (req) => {

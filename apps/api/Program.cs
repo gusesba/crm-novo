@@ -14,6 +14,7 @@ builder.Services.AddExceptionHandler<ExceptionHandler>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<CurrentUser>();
 builder.Services.AddScoped<LeadService>();
+builder.Services.AddScoped<WhatsAppAccounts>();
 builder.Services.AddDbContext<CrmDbContext>(o =>
 {
     var connection = new SqliteConnection(builder.Configuration.GetConnectionString("Crm") ?? "Data Source=data/crm.db");

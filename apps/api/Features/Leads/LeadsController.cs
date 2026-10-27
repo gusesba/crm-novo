@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Crm.Api.Features.Leads;
 
 [ApiController, Authorize, Route("api/leads")]
-public class LeadsController(CrmDbContext db, CurrentUser current, LeadService service, WhatsAppClient whatsapp) : ControllerBase
+public class LeadsController(CrmDbContext db, CurrentUser current, LeadService service, WhatsAppClient whatsapp, WhatsAppAccounts accounts) : ControllerBase
 {
     [HttpGet]
     public async Task<object> List(string? search, string? status, int? serviceId, int? sellerId, int? branchId, int? classificationId, DateTime? createdFrom, DateTime? createdTo, string? sort, int? originalSellerId, bool mine = false, bool sales = false, bool transferred = false, int page = 1, int pageSize = 20)
@@ -96,11 +96,12 @@ public class LeadsController(CrmDbContext db, CurrentUser current, LeadService s
     [HttpPost("{id:int}/conversation")]
     public async Task<object> Conversation(int id, ConversationRequest r)
     {
+        var session = await accounts.Session(current.Id);
         var lead = await service.Find(id);
         if (lead.CurrentSellerId != current.Id) throw new BusinessException("Somente o vendedor atual pode vincular a conversa.", 403);
         if (lead.Status == LeadStatuses.OptOut) throw new BusinessException("Este contato está marcado como Não Enviar Mais.", 403);
         if (lead.Revision != r.Revision) throw new BusinessException("O lead foi alterado por outro usuário. Atualize a página.", 409);
-        if (lead.ChatId == lead.Phone + "@s.whatsapp.net" && lead.ChatUserId == current.Id)
+        if (session == current.Id.ToString() && lead.ChatId == lead.Phone + "@s.whatsapp.net" && lead.ChatUserId == current.Id)
             return new { phone = lead.Phone, chatId = lead.ChatId, requiresConfirmation = false, exists = true };
         var result = await whatsapp.Send(current.Id, HttpMethod.Post, "resolve-phone", new { phone = lead.Phone });
         if (result.ValueKind == System.Text.Json.JsonValueKind.Null) throw new BusinessException("O número original e suas variantes não foram encontrados no WhatsApp.", 404);

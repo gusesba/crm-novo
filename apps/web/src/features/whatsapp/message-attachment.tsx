@@ -1,6 +1,7 @@
 "use client";
 
 import { api } from "@/lib/api";
+import { useWhatsAppApi } from "./account-context";
 import type { Message } from "@/lib/types";
 import {
   Download,
@@ -23,6 +24,7 @@ export function MessageAttachment({
   userId?: string;
   onError: (message: string) => void;
 }) {
+  const { path } = useWhatsAppApi();
   const host = useRef<HTMLDivElement>(null);
   const attempted = useRef(false);
   const [visible, setVisible] = useState(false);
@@ -62,7 +64,7 @@ export function MessageAttachment({
     attempted.current = true;
     let active = true;
     setLoading(true);
-    loadMedia(message.id, userId)
+    loadMedia(path(`/whatsapp/media/${message.id}${userId ? `?userId=${userId}` : ""}`))
       .then((loaded) => {
         if (active) setMedia(loaded);
         else URL.revokeObjectURL(loaded.url);
@@ -72,7 +74,7 @@ export function MessageAttachment({
     return () => {
       active = false;
     };
-  }, [media, message.id, retryKey, userId, visible]);
+  }, [media, message.id, retryKey, userId, visible, path]);
 
   useEffect(
     () => () => {
@@ -85,7 +87,7 @@ export function MessageAttachment({
 
   async function download() {
     try {
-      const loaded = media || (await loadMedia(message.id, userId));
+      const loaded = media || (await loadMedia(path(`/whatsapp/media/${message.id}${userId ? `?userId=${userId}` : ""}`)));
       const link = document.createElement("a");
       link.href = loaded.url;
       link.download = loaded.name;
@@ -103,7 +105,7 @@ export function MessageAttachment({
     }
     setLoading(true);
     try {
-      const loaded = await loadMedia(message.id, userId);
+      const loaded = await loadMedia(path(`/whatsapp/media/${message.id}${userId ? `?userId=${userId}` : ""}`));
       setMedia(loaded);
       setExpanded(true);
     } catch (cause) {
@@ -215,9 +217,9 @@ export function MessageAttachment({
   );
 }
 
-async function loadMedia(id: string, userId?: string) {
+async function loadMedia(path: string) {
   const file = await api<{ data: string; mime: string; name: string }>(
-    `/whatsapp/media/${id}${userId ? `?userId=${userId}` : ""}`,
+    path,
   );
   const bytes = Uint8Array.from(atob(file.data), (character) =>
     character.charCodeAt(0),

@@ -39,7 +39,11 @@ const logger = pino({ level: process.env.LOG_LEVEL || "warn" });
 
 export function sessionStatus(user: string) {
   const session = sessions.get(user);
-  return { status: session?.status || "disconnected", qr: session?.qr };
+  return {
+    status: session?.status || "disconnected",
+    qr: session?.qr,
+    phone: session?.status === "connected" ? session.socket?.user?.id.split(":")[0].split("@")[0] : undefined,
+  };
 }
 export function connectedSocket(user: string): WASocket {
   const session = sessions.get(user);

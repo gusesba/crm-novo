@@ -28,6 +28,14 @@ public class CatalogItem
     public bool Active { get; set; } = true;
 }
 
+public class WhatsAppAccount
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public int UserId { get; set; }
+    public string Name { get; set; } = "";
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
 public class Lead
 {
     public int Id { get; set; }

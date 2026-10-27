@@ -1,9 +1,9 @@
 "use client";
+import { useWhatsAppApi } from "./account-context";
 import { useState, type FormEvent } from "react";
 import { useApp } from "@/components/providers";
 import { Field, Loading, Modal } from "@/components/ui";
-import { useResource } from "@/hooks/use-resource";
-import { put } from "@/lib/api";
+import { useWhatsAppResource as useResource } from "./account-context";
 import { ContactRound } from "lucide-react";
 
 export type WhatsAppContact = {
@@ -49,6 +49,7 @@ export function ContactForm({
   onClose: () => void;
   onSaved: (contact: WhatsAppContact) => void;
 }) {
+  const { put } = useWhatsAppApi();
   const { notify } = useApp();
   const result = useResource<WhatsAppContact>(
     `/whatsapp/contacts?chatId=${encodeURIComponent(chatId)}`,

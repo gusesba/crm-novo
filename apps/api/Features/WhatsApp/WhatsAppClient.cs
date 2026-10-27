@@ -3,11 +3,11 @@ using Crm.Api.Domain;
 
 namespace Crm.Api.Features.WhatsApp;
 
-public class WhatsAppClient(HttpClient http)
+public class WhatsAppClient(HttpClient http, WhatsAppAccounts accounts)
 {
     public async Task<(byte[] Data, string ContentType)> Download(int userId, string path)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"/sessions/{userId}/{path}");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/sessions/{await accounts.Session(userId)}/{path}");
         using var response = await http.SendAsync(request);
         if (!response.IsSuccessStatusCode)
             throw new BusinessException("Foto de perfil indisponível.", (int)response.StatusCode);
@@ -17,8 +17,8 @@ public class WhatsAppClient(HttpClient http)
         return (await response.Content.ReadAsByteArrayAsync(), contentType);
     }
 
-    public Task<JsonElement> Send(int userId, HttpMethod method, string path, object? body = null)
-        => SendPath($"/sessions/{userId}/{path}", method, body);
+    public async Task<JsonElement> Send(int userId, HttpMethod method, string path, object? body = null)
+        => await SendPath($"/sessions/{await accounts.Session(userId)}/{path}", method, body);
 
     public Task<JsonElement> SendGlobal(HttpMethod method, string path, object? body = null)
         => SendPath($"/{path}", method, body);

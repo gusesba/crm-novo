@@ -6,6 +6,7 @@ namespace Crm.Api.Infrastructure;
 public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
+    public DbSet<WhatsAppAccount> WhatsAppAccounts => Set<WhatsAppAccount>();
     public DbSet<Branch> Branches => Set<Branch>();
     public DbSet<CatalogItem> Catalog => Set<CatalogItem>();
     public DbSet<Lead> Leads => Set<Lead>();
@@ -18,6 +19,9 @@ public class CrmDbContext(DbContextOptions<CrmDbContext> options) : DbContext(op
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<User>().HasIndex(x => x.Username).IsUnique();
+        b.Entity<WhatsAppAccount>().Property(x => x.Id).HasMaxLength(32);
+        b.Entity<WhatsAppAccount>().Property(x => x.Name).HasMaxLength(80);
+        b.Entity<WhatsAppAccount>().HasOne<User>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<User>().HasOne<Branch>().WithMany().HasForeignKey(x => x.BranchId).OnDelete(DeleteBehavior.Restrict);
         b.Entity<Lead>().HasIndex(x => new { x.BranchId, x.Phone }).IsUnique();
         b.Entity<Lead>().HasIndex(x => new { x.ChatUserId, x.ChatId }).IsUnique();

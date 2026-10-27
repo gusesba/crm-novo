@@ -1,7 +1,7 @@
 "use client";
+import { useWhatsAppApi } from "./account-context";
 import { Empty, ErrorBox, Loading } from "@/components/ui";
-import { useResource } from "@/hooks/use-resource";
-import { post } from "@/lib/api";
+import { useWhatsAppResource as useResource } from "./account-context";
 import { date } from "@/lib/format";
 import type {
   Attachment,
@@ -52,6 +52,7 @@ const deliveryIcons = {
 };
 
 export function CampaignTracking() {
+  const { post } = useWhatsAppApi();
   const pageSize = 6;
   const [page, setPage] = useState(1);
   const [expanded, setExpanded] = useState<string>();

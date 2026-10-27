@@ -7,6 +7,7 @@ import { sendMessage } from "../messaging/send.js";
 import type { CampaignInput } from "../messaging/schemas.js";
 import { deliver } from "./deliver.js";
 import { sendToPhone } from "./send-to-phone.js";
+import { sessionOwner } from "../sessions/session-id.js";
 
 const controllers = new Map<string, AbortController>();
 const running = new Map<string, Promise<void>>();
@@ -125,7 +126,7 @@ async function run(
     await deliver(input, signal, {
       eligible: async (recipient) => {
         const response = await fetch(
-          `${config.apiUrl}/internal/eligibility?userId=${user}&leadId=${recipient.leadId}&phone=${recipient.phone}`,
+          `${config.apiUrl}/internal/eligibility?userId=${sessionOwner(user)}&leadId=${recipient.leadId}&phone=${recipient.phone}`,
           {
             headers: { "x-service-key": config.secret },
             signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),

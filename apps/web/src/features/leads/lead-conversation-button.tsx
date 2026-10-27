@@ -1,5 +1,6 @@
 "use client";
-import { post } from "@/lib/api";
+import { api, post } from "@/lib/api";
+import type { WhatsAppAccount } from "@/lib/whatsapp-account";
 import { useApp } from "@/components/providers";
 import { ErrorBox, Modal } from "@/components/ui";
 import type { Lead } from "@/lib/types";
@@ -20,11 +21,28 @@ export function LeadConversationButton({ lead }: { lead: Lead }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [variant, setVariant] = useState<Resolution>();
-  async function open(acceptedPhone?: string) {
+  const [accounts, setAccounts] = useState<WhatsAppAccount[]>();
+  const [accountId, setAccountId] = useState("default");
+  async function chooseAccount() {
     setBusy(true);
     setError("");
     try {
-      const result = await post<Resolution>(`/leads/${lead.id}/conversation`, {
+      const items = await api<WhatsAppAccount[]>("/whatsapp/accounts");
+      if (items.length > 1) setAccounts(items);
+      else await open(undefined, "default");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function open(acceptedPhone?: string, selectedAccount = accountId) {
+    setAccountId(selectedAccount);
+    setAccounts(undefined);
+    setBusy(true);
+    setError("");
+    try {
+      const result = await post<Resolution>(`/leads/${lead.id}/conversation?accountId=${encodeURIComponent(selectedAccount)}`, {
         revision: lead.revision,
         acceptedPhone,
       });
@@ -37,7 +55,7 @@ export function LeadConversationButton({ lead }: { lead: Lead }) {
         notify(
           "Já existe uma conversa com este número. Abrindo a conversa existente.",
         );
-      router.push(`/whatsapp?phone=${encodeURIComponent(result.phone)}`);
+      router.push(`/whatsapp?phone=${encodeURIComponent(result.phone)}&accountId=${encodeURIComponent(selectedAccount)}`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -51,12 +69,20 @@ export function LeadConversationButton({ lead }: { lead: Lead }) {
           type="button"
           className="text-button"
           disabled={busy}
-          onClick={() => void open()}
+          onClick={() => void chooseAccount()}
         >
           {busy ? "Consultando…" : "Conversa"}
         </button>
         {error && <ErrorBox message={error} />}
       </span>
+      {accounts && createPortal(
+        <Modal title="Escolher conta WhatsApp" onClose={() => setAccounts(undefined)}>
+          <div className="modal-form">
+            <p>Qual conta deseja usar para conversar com {lead.name}?</p>
+            {accounts.map((account) => <button key={account.id} type="button" className="button secondary" onClick={() => void open(undefined, account.id)}>{account.name}</button>)}
+          </div>
+        </Modal>, document.body,
+      )}
       {variant &&
         createPortal(
           <Modal

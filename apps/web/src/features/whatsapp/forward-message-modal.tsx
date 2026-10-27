@@ -1,7 +1,7 @@
 "use client";
+import { useWhatsAppApi } from "./account-context";
 import { useApp } from "@/components/providers";
 import { Avatar, ErrorBox, Modal } from "@/components/ui";
-import { post } from "@/lib/api";
 import type { Chat, Message } from "@/lib/types";
 import { Search } from "lucide-react";
 import { useState } from "react";
@@ -17,6 +17,7 @@ export function ForwardMessageModal({
   onClose: () => void;
   onForwarded: (chatId: string) => void;
 }) {
+  const { post } = useWhatsAppApi();
   const { notify } = useApp();
   const [search, setSearch] = useState("");
   const [busy, setBusy] = useState("");

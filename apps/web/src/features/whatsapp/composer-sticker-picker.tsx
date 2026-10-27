@@ -1,6 +1,6 @@
 "use client";
+import { useWhatsAppApi } from "./account-context";
 
-import { api } from "@/lib/api";
 import { ErrorBox } from "@/components/ui";
 import type { Attachment } from "@/lib/types";
 import { Plus } from "lucide-react";
@@ -17,6 +17,7 @@ export function ComposerStickerPicker({
   onSelect: (attachment: Attachment) => void;
   onError: (message: string) => void;
 }) {
+  const { api } = useWhatsAppApi();
   const [items, setItems] = useState<RecentSticker[]>([]);
   const [loaded, setLoaded] = useState<Record<string, StickerMedia>>({});
   const [loading, setLoading] = useState(true);

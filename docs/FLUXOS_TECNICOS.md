@@ -44,6 +44,8 @@ Fluxos de armazenamento local de mídia, consulta de uso e limpeza manual/autom�
 
 Fluxo de salvar/editar contatos na agenda da conta WhatsApp com nome e sobrenome revisado em **27/10/2026** (7.4, 12.1, 15.1 e 18).
 
+Fluxos de múltiplas contas WhatsApp por usuário e abas por conta revisados em **27/10/2026** (3.1, 7.1, 11–18).
+
 “Todos os fluxos” significa os caminhos de negócio e as ramificações explícitas implementadas, incluindo sucesso, validação, autorização, cancelamento, falha parcial e processamento automático. Falhas genéricas compartilhadas estão na seção 3 e se aplicam às operações posteriores. Não é uma homologação de uma conta real do WhatsApp nem uma promessa de compatibilidade do protocolo externo.
 
 Os exemplos usam JSON com propriedades camelCase, como recebido/enviado pelo navegador. IDs, nomes e datas são ilustrativos. Caminhos de código são relativos à raiz do repositório; links deste documento apontam para os arquivos efetivamente pesquisados.
@@ -63,13 +65,13 @@ Os exemplos usam JSON com propriedades camelCase, como recebido/enviado pelo nav
 | `/groups` | Listar grupos internos, filtrar candidatos por múltiplos status/serviços/sedes/vendedores/classificações pessoais, opção Sem serviço, criação com Agendar Contato/Stand By como padrão, seleção em várias páginas, criar/renomear com nome único por usuário, substituir participantes e excluir | 9 |
 | `/settings` | Equipe, senha/perfil/sede, ativação e inativação de usuários, sedes, serviços e condições de venda; rejeição de nomes duplicados em sedes e em cada tipo de catálogo | 10 |
 | `/settings/media` | Administrador global consulta espaço de mídia, configura retenção opcional por dias e revisa/confirma limpeza somente de arquivos locais, preservando mensagens | 10.4 |
-| `/whatsapp`, `/campaigns` | Sessão pessoal, QR Code, status, desconexão, reconexão e restauração | 11 |
+| `/whatsapp`, `/campaigns` | Múltiplas contas pessoais em abas, cadastro de contas adicionais, QR Code, status/telefone, desconexão, reconexão e restauração independentes | 11 |
 | `/whatsapp` | Lista/busca de conversas, visualizações combináveis WhatsApp/status/classificação com grupos recolhíveis, contador de não lidas, leitura automática ao abrir, arquivar/desarquivar, consulta de fixadas, fotos, histórico, mensagens anteriores, nova conversa e bolinhas/seleção múltipla de classificações do lead vinculado | 12 |
 | Compositor e mensagens | Texto com renderização de negrito/itálico/tachado/código no histórico, indicadores de editada/encaminhada, emoji, resposta com autor/prévia da mensagem citada, edição, reação/remoção de reação, encaminhamento, exclusão local/para todos | 12.3 e 13 |
 | Anexos e contatos | Fotos, vídeos, documentos, seleção/colagem de múltiplos anexos por mensagem com remoção individual, áudio, gravação de voz, figurinhas recentes/criadas, vCard, telefone detectado no texto, copiar número, prévia/download de mídia | 14 |
 | Serviço WhatsApp | Receber/sincronizar mensagens, contatos e estados de chats; persistir edição, reação e revogação | 15 |
 | `/campaigns` | Público por múltiplos status/serviços/sedes/vendedores/classificações pessoais, opção Sem serviço, período de cadastro/grupo/seleção/exclusões, sequência com personalização por primeiro nome/nome completo, prévia local, confirmação, fila, intervalos/pausas lembrados no navegador, resultados/detalhes e cancelamento | 16 |
-| `/backup` | Consulta ao histórico pessoal e consulta administrativa a outras sessões permitidas | 17 |
+| `/backup` | Abas por conta no histórico pessoal e consulta administrativa às contas de outros usuários permitidos | 17 |
 | Operação | Health checks, encerramento dos workers/sockets e persistência | 18 |
 | Limites e diferenças reais | Funcionalidades ausentes, divergências e detalhes que alteram o fluxo | 19 |
 
@@ -104,7 +106,7 @@ Evento no componente → api/post/put → /api/* no mesmo domínio
   → rewrite do Next.js → API .NET
     → autenticação + autorização + CSRF + validação de DTO
       → EF Core/CRM SQLite, ou WhatsAppClient
-        → /sessions/{idDoUsuarioAutenticado}/* no Fastify
+        → /sessions/{chaveDaContaAutorizada}/* no Fastify
           → WhatsApp SQLite e/ou socket Baileys → WhatsApp externo
 ```
 
@@ -115,7 +117,7 @@ Evento no componente → api/post/put → /api/* no mesmo domínio
 - Cookie de sessão `via.session`: HttpOnly, SameSite Strict, política Secure conforme configuração; validade de oito horas com renovação deslizante.
 - Em toda validação do cookie, consulta usuário no banco: inexistência, inatividade, SecurityStamp diferente ou sede inativa invalidam o principal.
 - A API chama o serviço com `x-service-key` e timeout de 45 segundos. O Fastify verifica essa chave em todas as rotas, exceto `/health`.
-- Para operações pessoais de WhatsApp, `userId` vem da autenticação. Apenas consultas de histórico/foto/mídia aceitam outro usuário, sujeito às regras da seção 17.
+- Para operações pessoais de WhatsApp, o dono vem da autenticação. `accountId` opcional na query seleciona uma conta desse dono: omitido/`default` usa a chave legada igual ao ID do usuário; conta adicional exige registro próprio em `WhatsAppAccounts` e usa `{userId}_{accountId}` no serviço. Conta inexistente/alheia → `404` antes de chamar o WhatsApp, inclusive para administradores. O seletor é por requisição, sem variável global/cookie de conta ativa; operações pendentes continuam associadas à conta que iniciou a chamada. `WhatsAppClient` aplica a resolução central a `Send` e `Download`, incluindo a resolução de telefone no controller de leads. `SendGlobal` mantém os endpoints administrativos globais. Apenas listagem de contas e consultas de histórico/foto/mídia aceitam outro usuário, sujeito às regras da seção 17. Exemplos posteriores que omitem `accountId` mostram a conta principal; quando mencionam sessão/user no serviço, referem-se à chave da conta autorizada.
 
 ### 3.2 Escopo e autorização
 
@@ -362,21 +364,21 @@ Fontes: [lead-conversation-button.tsx](../apps/web/src/features/leads/lead-conve
 
 ### 7.1 Botão Conversa no lead
 
-1. Vendedor atual clica “Conversa” → `POST /api/leads/{id}/conversation`:
+1. Vendedor atual clica “Conversa” → consulta `GET /api/whatsapp/accounts`. Com uma conta, usa Principal; com várias, abre modal para escolher pelo nome. Cancelar fecha sem resolver/vincular. A escolha faz `POST /api/leads/{id}/conversation?accountId={conta}`:
 
 ```json
 { "revision": 4, "acceptedPhone": null }
 ```
 
 2. API busca no escopo; exige CurrentSellerId igual ao usuário **inclusive para admin**, status não bloqueado e revisão atual. Falhas → `404`, `403`, `409`.
-3. Se já vinculado ao telefone e à sessão atuais → retorna `{phone,chatId,requiresConfirmation:false,exists:true}`, sem consultar socket.
-4. Caso contrário → serviço `POST /sessions/{user}/resolve-phone` com `{phone}` → precisa connectedSocket (`409` se desconectado) → `socket.onWhatsApp`.
+3. Valida a conta escolhida como própria (`404` se inválida/alheia). Na conta principal, se já vinculado ao telefone e ao usuário atuais → retorna `{phone,chatId,requiresConfirmation:false,exists:true}`, sem consultar socket.
+4. Caso contrário, inclusive ao escolher conta adicional mesmo com vínculo prévio do próprio usuário → serviço `POST /sessions/{chaveDaConta}/resolve-phone` com `{phone}` → precisa connectedSocket (`409` se desconectado) → `socket.onWhatsApp`.
 5. Consulta número original primeiro. Para brasileiros, inclui alternativas com/sem 55 e com/sem nono dígito quando aplicável; aceita JID individual confirmado pelo WhatsApp. Nenhum encontrado → serviço `null` → API `404`, sem alterar lead.
 6. Retorno da resolução: `{phone,chatId,requiresConfirmation,exists}`; exists indica presença do chat no banco do serviço.
 7. Se número resolvido difere e AcceptedPhone não corresponde → API retorna `200` pedindo confirmação, sem salvar. Front abre modal; cancelar só fecha. Aceitar refaz POST com acceptedPhone igual à variante, ainda com revision original.
 8. Se conversa já existe e número é exatamente o atual → API retorna sem alterar vínculo. Front notifica e navega para conversa existente; abrir não significa vincular automaticamente nesse ramo.
 9. Nos demais ramos, rejeita vínculo prévio incompatível ou duplicidade de telefone na sede/vínculo pessoal (`409`); atualiza Phone/ChatId/ChatUserId, UpdatedAt/Revision e salva.
-10. Sucesso → `/whatsapp?phone={phone}` → ChatPage seleciona JID correspondente e carrega mensagens. Abrir não envia mensagem.
+10. Sucesso → `/whatsapp?phone={phone}&accountId={conta}` → seleciona a aba indicada e abre o JID correspondente. A confirmação de variante mantém a mesma conta. Abrir não envia mensagem. O vínculo CRM continua por `ChatUserId` (ID do usuário) + `ChatId` (telefone), compartilhado entre as contas desse usuário; não grava a chave composta do serviço no lead e não duplica o cadastro por conta.
 
 ### 7.2 Vincular explicitamente
 
@@ -557,16 +559,28 @@ Fontes: [media-settings-page.tsx](../apps/web/src/features/settings/media-settin
 
 Fontes: [connection.tsx](../apps/web/src/features/whatsapp/connection.tsx), [WhatsAppController.cs](../apps/api/Features/WhatsApp/WhatsAppController.cs), [routes.ts](../apps/whatsapp/src/routes.ts), [manager.ts](../apps/whatsapp/src/sessions/manager.ts), [auth.ts](../apps/whatsapp/src/storage/auth.ts).
 
+### 11.0 Contas pessoais e abas
+
+Fontes adicionais: [WhatsAppAccountsController.cs](../apps/api/Features/WhatsApp/WhatsAppAccountsController.cs), [WhatsAppAccounts.cs](../apps/api/Features/WhatsApp/WhatsAppAccounts.cs), [WhatsAppClient.cs](../apps/api/Features/WhatsApp/WhatsAppClient.cs), [account-workspace.tsx](../apps/web/src/features/whatsapp/account-workspace.tsx), [account-context.tsx](../apps/web/src/features/whatsapp/account-context.tsx), [whatsapp-account.ts](../apps/web/src/lib/whatsapp-account.ts), [session-id.ts](../apps/whatsapp/src/sessions/session-id.ts).
+
+1. Conversas, Disparos e Backup montam o seletor de contas. `GET /api/whatsapp/accounts` retorna `[{id:"default",name:"Principal"},...]`, seguido das contas adicionais do usuário, ordenadas por criação/ID. Não consulta sockets nem expõe credenciais/QR de outras contas. Atualiza a lista a cada dez segundos. A conta principal é implícita; não exige cadastro/migração do histórico existente e continua usando a chave numérica anterior.
+2. Em Conversas/Disparos, “Adicionar conta” abre modal com Nome obrigatório, até oitenta caracteres. Campo vazio/só espaços impede submit; a API também valida (`400`). Cancelar antes de salvar não cadastra nem conecta. `POST /api/whatsapp/accounts` com `{name}` exige autenticação e CSRF, ignora dono enviado pelo cliente, aplica trim e grava UUID de 32 caracteres minúsculos, nome, dono autenticado e CreatedAt no CRM. Retorna `{id,name}`; não cria socket antes da ação Conectar. Não há limite configurado de contas nem unicidade dos nomes. Falha mantém modal/dados para correção; sair durante uma gravação já iniciada não desfaz eventual cadastro confirmado no servidor.
+3. Sucesso adiciona/seleciona a nova aba imediatamente e recarrega o catálogo. Cada conta tem Conectar/Desconectar e status independentes. O usuário conecta o número desejado pelo QR nessa aba; um erro não desconecta as outras. Conta adicional fica cadastrada mesmo se o QR não for concluído ou após desconectar, permitindo tentar novamente. Não há exclusão/renomeação de abas nesta entrega.
+4. Abas usam `tablist/tab/tabpanel`, seleção acessível, setas esquerda/direita e Home/End; nomes longos são truncados e a faixa permite rolagem horizontal. A seleção é local à página, com Principal como padrão; deep link com `accountId` abre a conta indicada e conta desconhecida mostra erro sem escolher outra silenciosamente. Trocar de conta remonta o conteúdo: limpa conversa/foto/seleções/modais/rascunhos e filtros locais, interrompe o polling desmontado e inicia consultas da nova conta. O contexto captura a conta no cliente HTTP e nas URLs de fotos/mídia, evitando reaproveitar histórico, IDs de mensagens, anexos ou respostas tardias de outra conta. Voltar à conta recarrega seu conteúdo armazenado. Não há persistência dos rascunhos por aba.
+5. Trocar/fechar abas não desconecta sockets nem cancela campanhas/ações remotas já iniciadas. As sessões continuam recebendo/sincronizando seus dados em paralelo; o navegador consulta somente a conta visível. Falha de consulta mantém os dados anteriores da mesma conta com erro/retry; a troca remonta o estado para não exibir dados de outra. Antes de obter o catálogo não monta o atendimento.
+6. A migração `MultipleWhatsAppAccounts` cria somente o catálogo de contas adicionais no CRM, com FK restrita para Users. O serviço aceita chaves numéricas legadas ou `{donoNumérico}_{uuid32}`; auth, sockets, reconexão, chats, mensagens, contatos/agenda, leitura, arquivamento, reações, fotos, mídia e campanhas ficam isolados pela chave completa já usada como `user_id TEXT`. Não copia, renomeia nem apaga os registros anteriores. A restauração percorre todas as chaves com credenciais, incluindo as contas adicionais. As permissões de carteira/OptOut/sede e classificações continuam baseadas no usuário CRM. Um lead vinculado ao telefone/usuário aparece nas contas desse usuário em que essa conversa existir; nomes salvos na agenda WhatsApp permanecem por conta.
+
 ### 11.1 Status e conectar
 
-1. Abrir Conversas ou Disparos monta Connection → `GET /api/whatsapp/status` a cada cinco segundos → API encaminha a `/sessions/{current.Id}/status`.
-2. Retorno `{status,qr?}`; estados: disconnected, connecting, qr, connected. Sem sessão em memória → disconnected.
+1. Abrir uma aba de conta em Conversas ou Disparos monta Connection → `GET /api/whatsapp/status[?accountId=...]` a cada cinco segundos → API encaminha a `/sessions/{chaveDaConta}/status`.
+2. Retorno `{status,qr?,phone?}`; conectado acrescenta o telefone extraído da identidade do socket e o painel mostra o número da conta. Estados: disconnected, connecting, qr, connected. Sem sessão em memória → disconnected.
 3. Clicar Conectar → `POST /api/whatsapp/connect` sem corpo → `POST /sessions/{user}/connect`.
 4. Sessão já connecting/qr/connected → devolve status existente, sem criar socket duplicado. Desconectada → limpa timer/QR, marca connecting, lê credenciais/chaves SQLite ou inicia credenciais novas e cria socket.
 5. API devolve status inicial → front recarrega status e abre modal. Sem QR mostra Loading; evento `connection.update.qr` gera Data URL do QR, salva em memória e muda para qr; próximo GET entrega a imagem.
 6. Usuário escaneia no celular → socket abre → connected, limpa QR, zera tentativas. Front mostra confirmação e “Ir para as conversas”, que fecha modal.
 7. `creds.update` salva credenciais no SQLite; chaves são atualizadas em transação. QR não é persistido no banco.
 8. Se falha na chamada, front mostra erro e libera botão. Se status fica disconnected no modal, “Gerar novo código” refaz connect. Fechar modal não desconecta nem cancela socket.
+9. Ao montar/trocar a aba, antes da primeira resposta de status, o painel mostra “Verificando conexão…” e bloqueia a ação. Não apresenta “Conectar WhatsApp” nem indica desconexão enquanto o estado ainda é desconhecido. Se a primeira consulta falhar, mostra status indisponível e “Verificar conexão”, que apenas repete o GET; o ErrorBox também oferece retry. Polling posterior preserva o último estado conhecido durante atualizações. Trocar de aba não chama connect/disconnect; as sessões do serviço permanecem independentes.
 
 ### 11.2 Conexão estabelecida e reconexão automática
 
@@ -579,7 +593,7 @@ Fontes: [connection.tsx](../apps/web/src/features/whatsapp/connection.tsx), [Wha
 ### 11.3 Desconectar
 
 1. Botão Desconectar → confirm; cancelar não chama API. Confirmar → `POST /api/whatsapp/disconnect` sem corpo → serviço.
-2. Marca stopped, cancela timer e tenta socket.logout; falha faz socket.end. Remove sessão em memória e auth do usuário.
+2. Marca stopped, cancela timer e tenta socket.logout; falha faz socket.end. Remove somente a sessão em memória e auth da conta selecionada. As outras contas continuam conectadas.
 3. Retorna `{status:'disconnected'}` → front reload. Chats, mensagens, fotos e campanhas não são apagados. Não há comando para cancelar todas as campanhas nessa rota; próximos envios podem falhar por falta de conexão.
 
 ## 12. Conversas, lista e histórico
@@ -588,7 +602,7 @@ Fontes: [chat-page.tsx](../apps/web/src/features/whatsapp/chat-page.tsx), [chat-
 
 ### 12.1 Listar, buscar e combinar visualizações por WhatsApp, status e classificação
 
-1. ChatPage → `GET /api/whatsapp/chats` a cada cinco segundos → serviço consulta SQLite por user.
+1. ChatPage → `GET /api/whatsapp/chats[?accountId=...]` a cada cinco segundos na aba ativa → serviço consulta SQLite pela chave completa da conta. Selecionar outra conta reinicia a lista/histórico conforme 11.0.
 2. Normaliza chat states @lid para telefone quando há mapeamento nas chaves. Lista até quinhentas conversas não arquivadas e todas as arquivadas; prioriza fixadas/data. Chats só com estado, sem registro em chats, não são produzidos por essa consulta.
 3. API aplica nome/status do lead vinculado no escopo/sessão sobre o nome recebido; fallback é nome válido do WhatsApp ou número. Retorna `[{id,name,lastText,updatedAt,archived,pinnedAt,unreadCount,markedUnread,leadId,leadStatus,classifications:[{id,name,color}]}]`. `unreadCount` é inteiro não negativo e `markedUnread` distingue a marcação manual sem quantidade; payload antigo/inválido usa zero/false. Sem vínculo explícito no escopo: leadId=null/leadStatus=null/classifications=[], mesmo que o telefone coincida com um lead. Consulta os vínculos/classificações em lote, somente do usuário autenticado. leadStatus é o status atual do lead em cada consulta.
 4. Busca por nome/ID acontece localmente, antes do agrupamento, sem parâmetro para API. Ao alterar uma busca não vazia, abre os grupos que contêm resultados, inclusive arquivadas; permite recolhê-los novamente. Front prioriza fixadas, depois data e ID. Arquivadas (inclusive quando fixadas) permanecem no grupo Arquivadas. Somente WhatsApp ativo mantém subtítulo Fixadas dentro de Conversas.
@@ -661,6 +675,8 @@ Fontes: [chat-states.ts](../apps/whatsapp/src/storage/chat-states.ts), [database
 Fontes: [message-composer.tsx](../apps/web/src/features/whatsapp/message-composer.tsx), [message-actions-menu.tsx](../apps/web/src/features/whatsapp/message-actions-menu.tsx), [forward-message-modal.tsx](../apps/web/src/features/whatsapp/forward-message-modal.tsx), [delete-message-modal.tsx](../apps/web/src/features/whatsapp/delete-message-modal.tsx), [WhatsAppController.cs](../apps/api/Features/WhatsApp/WhatsAppController.cs), [schemas.ts](../apps/whatsapp/src/messaging/schemas.ts), [send.ts](../apps/whatsapp/src/messaging/send.ts).
 
 ### 13.1 Regra aplicada antes de enviar/editar/reagir/encaminhar/excluir
+
+Todas as chamadas de envio/ação usam a conta da aba via query `accountId`, inclusive mídia, agenda, stickers, respostas, edições, reações, exclusões e encaminhamentos. Não encaminha conteúdo/mensagem entre contas: a origem e os candidatos de encaminhamento pertencem à mesma conta. Uma operação iniciada antes de trocar a aba mantém sua conta original; a troca não a desfaz.
 
 API `EnsureCanMessage(chatId)`:
 
@@ -798,7 +814,7 @@ Fontes: [attachment.tsx](../apps/web/src/features/whatsapp/attachment.tsx), [com
 
 Fontes: [manager.ts](../apps/whatsapp/src/sessions/manager.ts), [read-sync.ts](../apps/whatsapp/src/sessions/read-sync.ts), [messages.ts](../apps/whatsapp/src/storage/messages.ts), [contacts.ts](../apps/whatsapp/src/storage/contacts.ts), [chat-states.ts](../apps/whatsapp/src/storage/chat-states.ts).
 
-Esses fluxos são originados por eventos Baileys, sem clique e sem POST do navegador.
+Esses fluxos são originados por eventos Baileys, sem clique e sem POST do navegador. Cada socket captura sua chave de conta completa, inclusive para contas do mesmo usuário; contas fora da aba visível continuam sincronizando. IDs iguais de chat/mensagem em contas diferentes não mesclam dados.
 
 | Evento | Tratamento/persistência | Resultado visto no app |
 | --- | --- | --- |
@@ -912,7 +928,7 @@ Fontes: [campaigns-page.tsx](../apps/web/src/features/whatsapp/campaigns-page.ts
 ### 16.4 Criar campanha persistida e iniciar worker
 
 1. API transforma leads em `recipients:[{leadId,phone,name}]`, sem aceitar livremente essa lista do navegador; envia `/sessions/{user}/campaigns` com name/messages/intervals/pauses/recipients.
-2. Fastify valida Zod completo e exige sessão conectada; se outro disparo do usuário está ativo em memória ou running no banco → `409`. Usuários diferentes podem executar campanhas simultaneamente.
+2. Fastify valida Zod completo e exige a conta selecionada conectada; se outro disparo da mesma conta está ativo em memória ou running no banco → `409`. Contas diferentes, inclusive do mesmo usuário, podem executar campanhas simultaneamente. Listagem, detalhes e cancelamento usam a mesma conta explícita; trocar de aba não cancela campanhas existentes. A troca descarta a preparação/confirmação ainda não enviada e reaplica os filtros iniciais; intervalos/pausas válidos continuam restaurados da preferência do navegador.
 3. Gera UUID, grava campaigns com payload completo (incluindo base64), status running, contadores zero; grava campaign_deliveries com posição e status pending.
 4. Cria AbortController e dispara run em segundo plano → retorna `{id}` imediatamente; não espera lote terminar.
 5. Front notifica, fecha confirmação e remonta acompanhamento na primeira página. Falha mantém configuração; erro aparece na página (modal de confirmação não tem ErrorBox próprio).
@@ -920,7 +936,7 @@ Fontes: [campaigns-page.tsx](../apps/web/src/features/whatsapp/campaigns-page.ts
 ### 16.5 Executar destinatário, sequência, variante e pausa
 
 1. Worker percorre recipients em ordem do público (Name/Id). Antes de cada destinatário verifica AbortSignal.
-2. Faz `GET /internal/eligibility?userId={user}&leadId={id}&phone={phoneOriginal}` na API CRM, com chave e timeout de dez segundos.
+2. Extrai o ID numérico do dono da chave de sessão (antes do sublinhado nas contas adicionais) e faz `GET /internal/eligibility?userId={donoCRM}&leadId={id}&phone={phoneOriginal}` na API CRM, com chave e timeout de dez segundos. Consulta o dono real para as permissões; os envios/histórico/campanha continuam usando a chave completa da conta.
 3. API exige chave (`401` inválida); retorna `{eligible}` verificando usuário ativo, lead existente, telefone ainda igual, status não OptOut, sede ativa e usuário na sede do lead ou admin global.
 4. **Não exige CurrentSellerId igual ao usuário.** Transferir para outro vendedor da mesma sede não torna inelegível por si só. Validação é uma vez por destinatário, antes da sequência; não é repetida entre todas as mensagens.
 5. eligible=false → registra skipped com motivo e avança sem mandar sequência. Falha HTTP/timeout ao verificar → erro global da campanha, interrompe avanço (status failed).
@@ -958,7 +974,7 @@ Fontes: [campaigns-page.tsx](../apps/web/src/features/whatsapp/campaigns-page.ts
 Fontes: [backup/page.tsx](../apps/web/src/app/%28workspace%29/backup/page.tsx), [chat-page.tsx](../apps/web/src/features/whatsapp/chat-page.tsx), [conversation.tsx](../apps/web/src/features/whatsapp/conversation.tsx), `HistoryUser` em [WhatsAppController.cs](../apps/api/Features/WhatsApp/WhatsAppController.cs).
 
 1. `/backup` usa `ChatPage backup`: lista de chats a cada cinco segundos; selecionar conversa carrega mensagens uma vez e habilita anteriores por cursor, sem compositor/menu de edição/reação/encaminhamento/exclusão.
-2. Pessoal usa os mesmos endpoints sem userId. Admin escolhe usuário no catálogo → limpa chat selecionado → refaz chats com userId; mensagens/fotos/mídia propagam a mesma sessão de origem.
+2. Pessoal consulta `/api/whatsapp/accounts` e escolhe a aba de conta. Admin escolhe usuário no catálogo → limpa conta/chat selecionados e consulta `/api/whatsapp/accounts?userId={origem}`, sujeito ao mesmo escopo de HistoryUser. Conta Principal é o padrão do usuário consultado. Chats/mensagens/fotos/mídia propagam tanto `userId` quanto `accountId` da origem; conta adicional precisa pertencer à origem autorizada (`404` caso contrário). Backup não oferece adicionar/conectar/desconectar, marcar leitura ou enviar. As rotas de escrita ignoram `userId` de terceiros e sempre validam a conta contra o usuário autenticado.
 3. `HistoryUser`: ID omitido/próprio → usuário atual; ID de terceiro → exige admin e usuário existente na sede do admin ou admin global. Fora da regra → `403`.
 4. Leitura do texto vem do SQLite, mesmo sem origem conectada. Fotos podem funcionar via cache; mídia com cópia local válida também funciona desconectada conforme 14.6. Sem essa cópia, depende do socket da **origem** e da disponibilidade externa; a consulta administrativa preserva a sessão de origem no acesso ao cache.
 5. O backup é uma tela de consulta ao histórico persistido: não cria arquivo de exportação, não importa/restaura banco e não garante sincronizar todo histórico do celular.
@@ -968,7 +984,7 @@ Fontes: [backup/page.tsx](../apps/web/src/app/%28workspace%29/backup/page.tsx), 
 
 Fontes: [CrmDbContext.cs](../apps/api/Infrastructure/CrmDbContext.cs), [Entities.cs](../apps/api/Domain/Entities.cs), [database.ts](../apps/whatsapp/src/storage/database.ts), [server.ts](../apps/whatsapp/src/server.ts), [compose.yaml](../compose.yaml).
 
-- CRM: Branches, Users, Catalog, Leads, Appointments, Groups, GroupMembers, Classifications e LeadClassifications via EF/SQLite. Índices únicos Username, BranchId+Phone e ChatUserId+ChatId; chave composta ClassificationId+LeadId nos vínculos pessoais. A migração LeadClassifications cria as novas tabelas no início da API, preservando os registros existentes. Revision é concurrency token só no lead.
+- CRM: Branches, Users, WhatsAppAccounts, Catalog, Leads, Appointments, Groups, GroupMembers, Classifications e LeadClassifications via EF/SQLite. Índices únicos Username, BranchId+Phone e ChatUserId+ChatId; chave composta ClassificationId+LeadId nos vínculos pessoais. As migrações LeadClassifications e MultipleWhatsAppAccounts criam as tabelas correspondentes no início da API, preservando os registros existentes. Revision é concurrency token só no lead.
 - Relações para sede/usuários/catálogo são restritas na exclusão. Excluir lead elimina retornos e memberships; excluir grupo elimina memberships. Não há histórico de transferências/edições por entidade.
 - Unicidade de nomes em sedes, serviços/condições e grupos internos é validada pelos endpoints em transações SQLite conforme 9.3 e 10.3, sem migração nem novos índices únicos. Registros anteriores não são renomeados, mesclados ou excluídos automaticamente; duplicados antigos podem ser corrigidos renomeando para um nome disponível. Escritas diretas no banco fora desses endpoints não passam por essa validação.
 - WhatsApp: auth, contacts, service_state, chats, chat_states, messages, pending_message_edits, reactions, profile_pictures, campaigns, deliveries no banco separado. Chats/mensagens/auth e fila de edições usam isolamento por user_id; campanha usa UUID + dono. A tabela de edições pendentes é acrescentada por CREATE TABLE IF NOT EXISTS, sem apagar mensagens/credenciais existentes; seu índice usa usuário/chat/alvo/timestamp.
@@ -1000,6 +1016,10 @@ Estes pontos são parte do fluxo implementado e devem ser considerados ao valida
 15. **Limites variam por camada:** tamanho binário de anexo é 16 MiB; base64 tem teto 22.400.000 caracteres; corpo HTTP 24.000.000 bytes. Nome de contato escolhido a partir de chat também passa pela validação de 120 caracteres no serviço.
 
 ## 20. Rastreabilidade e conferência da documentação
+
+Na correção da indicação transitória de desconexão ao trocar a aba de conta de 27/10/2026, [connection-status.test.ts](../apps/web/test/connection-status.test.ts) renderiza o componente real sem status inicial para a Principal e uma conta adicional: exige “Verificando conexão…”, botão desabilitado e ausência de comandos/textos de conectar/desconectar. A montagem anterior interpretava ausência de resposta como desconectado. Passaram os 45 testes do frontend, sua checagem de tipos e build de produção. A correção altera somente a apresentação inicial e o retry após falha da primeira consulta, sem comandos remotos, mudanças de sessão ou reinício do serviço WhatsApp.
+
+Na entrega de múltiplas contas WhatsApp por usuário de 27/10/2026, passaram os 195 testes da API (sete novos em [WhatsAppAccountTests.cs](../tests/Crm.Api.Tests/WhatsAppAccountTests.cs)), os 118 do serviço (três novos em [multiple-accounts.test.ts](../apps/whatsapp/test/multiple-accounts.test.ts)), os 44 do frontend (dois novos em [whatsapp-account.test.ts](../apps/web/test/whatsapp-account.test.ts)), checagens de tipos e builds de produção do frontend/serviço. Os casos cobrem preservação da chave legada, catálogo persistido/trim/CSRF/dono autenticado, seleção explícita em consultas e ações, rejeição de contas alheias/inexistentes sem chamada remota inclusive para admin, escopo de sede no Backup, falhas da integração, conversa de lead já vinculado usando a conta adicional, criação de campanha na conta escolhida, mesmo ID de mensagem/chat em contas distintas e desconexão sem apagar outras credenciais/históricos. O cliente React foi exercitado com três contextos e chamadas concorrentes, sem estado global de conta ativa. A execução completa com paralelismo de coleções encontrou uma falha de SQLitePCL por conexão descartada no seed de DashboardPeriodTests; os 195 passaram na repetição com coleções sem paralelismo, sem alterar Dashboard ou os testes existentes. No navegador integrado, usando API com banco demonstrativo isolado e serviço WhatsApp HTTP simulado, foram conferidos cadastro/seleção da segunda aba, duas contas conectadas, históricos distintos para o mesmo chat/ID, envio do compositor e leitura apontando à conta Comercial, retorno à Principal ainda conectada, abas em Disparos/Backup e deep link com conta/conversa. A captura está em `output/whatsapp-multiplas-contas.png`. Não houve conexão, envio, leitura ou alteração de agenda em conta real para teste; leitura de QR e funcionamento com duas contas físicas simultâneas não foram homologados nesta conferência. Sem campanhas running/queued no ambiente local, o supervisor foi reiniciado; a migração MultipleWhatsAppAccounts foi aplicada e API/serviço/frontend responderam `200` depois do reinício.
 
 Na correção da opção de contato ao abrir conversa pelo lead de 27/10/2026, o problema foi reproduzido no navegador integrado com Camila → Meus leads → Larissa Mendes 2 → Conversa: o ID da conversa tinha onze dígitos e o botão/rotas da agenda exigiam doze. Após alinhar as três camadas a 10–15 dígitos, passaram os 42 testes do frontend (dois novos em contact-button.test.ts), os sete de contacts.test.ts (um novo caso cobrindo os limites e preservação do ID) e os doze de WhatsAppContactTests (quatro novas variações), além das checagens de tipos e do build do serviço. Os testes de interface renderizam o botão real para o ID do caso relatado, em modos salvar/editar, e mantêm ausência em Backup/grupos/LID/IDs inválidos. Sem campanhas running/queued, os serviços foram reiniciados; os três responderam `200`. O mesmo caminho foi repetido no navegador e exibiu “Salvar contato”, abrindo Nome/Sobrenome sem erro de validação. A captura está em `output/contato-lead-larissa-corrigido.png`. O formulário não foi salvo, sem alteração de agenda real ou envio de mensagens para teste; telefone, vínculo e revisão do lead foram preservados.
 
@@ -1069,6 +1089,7 @@ Foram conferidos os cenários declarados na suíte existente, sem executar envio
 
 | Evidência no repositório | Regras/caminhos corroborados |
 | --- | --- |
+| [WhatsAppAccountTests.cs](../tests/Crm.Api.Tests/WhatsAppAccountTests.cs), [multiple-accounts.test.ts](../apps/whatsapp/test/multiple-accounts.test.ts), [whatsapp-account.test.ts](../apps/web/test/whatsapp-account.test.ts) | Contas persistidas por dono, sessão legada, seleção explícita/concorrente, isolamento de histórico/credenciais/ações, escopo administrativo, CSRF/validação/falha e resolução de leads/campanhas na conta escolhida |
 | [BusinessFlowTests.cs](../tests/Crm.Api.Tests/BusinessFlowTests.cs) | CSRF, escopo, telefone único, transferências, OptOut, retornos, grupos e elegibilidade |
 | [AppointmentDateFilterTests.cs](../tests/Crm.Api.Tests/AppointmentDateFilterTests.cs) | Filtro por dia antes da paginação, limites UTC do dia local, datas inválidas, carteira/lead/sede/conclusão e isolamento de acesso |
 | [LeadScopeTests.cs](../tests/Crm.Api.Tests/LeadScopeTests.cs), [LeadEditingTests.cs](../tests/Crm.Api.Tests/LeadEditingTests.cs) | Leitura/edição por sede/carteira, proteção de contato, exclusão |

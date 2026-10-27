@@ -304,6 +304,30 @@ namespace Crm.Api.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("Crm.Api.Domain.WhatsAppAccount", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("WhatsAppAccounts");
+                });
+
             modelBuilder.Entity("Crm.Api.Domain.Appointment", b =>
                 {
                     b.HasOne("Crm.Api.Domain.Lead", null)
@@ -398,6 +422,15 @@ namespace Crm.Api.Migrations
                         .WithMany()
                         .HasForeignKey("BranchId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Crm.Api.Domain.WhatsAppAccount", b =>
+                {
+                    b.HasOne("Crm.Api.Domain.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Crm.Api.Domain.ContactGroup", b =>

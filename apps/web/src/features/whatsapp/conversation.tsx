@@ -1,7 +1,7 @@
 "use client";
+import { useWhatsAppApi } from "./account-context";
 import { Avatar, Empty, ErrorBox, Loading } from "@/components/ui";
-import { useResource } from "@/hooks/use-resource";
-import { api, post, put } from "@/lib/api";
+import { useWhatsAppResource as useResource } from "./account-context";
 import { date, time } from "@/lib/format";
 import type { Chat, Message, SharedContact } from "@/lib/types";
 import { Ban, Forward } from "lucide-react";
@@ -28,6 +28,7 @@ export function Conversation({
   onStartConversation: (contact: SharedContact) => void;
   onRead: () => void;
 }) {
+  const { api, post, put, path: accountPath } = useWhatsAppApi();
   const path = `/whatsapp/messages?chatId=${encodeURIComponent(chatId)}${userId ? `&userId=${userId}` : ""}`;
   const result = useResource<Message[]>(path, backup ? undefined : 4000);
   const [older, setOlder] = useState<Message[]>([]);
@@ -203,7 +204,7 @@ export function Conversation({
                 <div className="message-contact-card">
                   <Avatar
                     name={m.contact.name}
-                    src={m.contact.phone ? `/api/whatsapp/profile-picture?chatId=${encodeURIComponent(m.contact.phone.replace(/\D/g, "") + "@s.whatsapp.net")}${userId ? `&userId=${encodeURIComponent(userId)}` : ""}` : undefined}
+                    src={m.contact.phone ? `/api${accountPath(`/whatsapp/profile-picture?chatId=${encodeURIComponent(m.contact.phone.replace(/\D/g, "") + "@s.whatsapp.net")}${userId ? `&userId=${encodeURIComponent(userId)}` : ""}`)}` : undefined}
                   />
                   <strong>{m.contact.name}</strong>
                 </div>

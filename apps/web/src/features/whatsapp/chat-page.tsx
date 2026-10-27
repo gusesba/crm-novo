@@ -1,24 +1,31 @@
 "use client";
+import { useWhatsAppApi } from "./account-context";
 import { useApp } from "@/components/providers";
 import { Avatar, Badge, Empty, ErrorBox, Loading, Modal } from "@/components/ui";
 import { LeadForm } from "@/features/leads/lead-form";
 import { Classifications } from "@/features/leads/classifications";
-import { useResource } from "@/hooks/use-resource";
-import { post, put } from "@/lib/api";
+import { useWhatsAppResource as useResource } from "./account-context";
 import { chatViews, type ChatView } from "@/lib/chat-groups";
 import type { Chat, Lead, PageResult, SharedContact } from "@/lib/types";
 import { Archive, ArchiveRestore, Link2, Plus, Search } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
+import { WhatsAppAccountContext } from "./account-context";
+import { WhatsAppWorkspace } from "./account-workspace";
 import { Connection } from "./connection";
 import { Conversation } from "./conversation";
 import { ChatList } from "./chat-list";
 import { ContactButton, ContactForm } from "./contact-form";
 
 export function ChatPage({ backup = false }: { backup?: boolean }) {
-  const { user, catalog, notify } = useApp();
+  return <WhatsAppWorkspace backup={backup}><ChatContent backup={backup} /></WhatsAppWorkspace>;
+}
+
+function ChatContent({ backup }: { backup: boolean }) {
+  const { post, put, path } = useWhatsAppApi();
+  const { user, notify } = useApp();
   const params = useSearchParams();
-  const [historyUser, setHistoryUser] = useState("");
+  const { accountId, userId: historyUser } = useContext(WhatsAppAccountContext);
   const [chat, setChat] = useState<Chat>();
   const [profilePhoto, setProfilePhoto] = useState<{ name: string; src: string }>();
   const [photoFailed, setPhotoFailed] = useState(false);
@@ -32,9 +39,9 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
   const [phoneVariant, setPhoneVariant] = useState<{ original: string; phone: string; chat: Chat }>();
   const suffix = backup && historyUser ? `?userId=${historyUser}` : "";
   const pictureUrl = (chatId: string) =>
-    `/api/whatsapp/profile-picture?chatId=${encodeURIComponent(chatId)}${
+    `/api${path(`/whatsapp/profile-picture?chatId=${encodeURIComponent(chatId)}${
       backup && historyUser ? `&userId=${historyUser}` : ""
-    }`;
+    }`)}`;
   function openProfilePhoto(contact: Chat) {
     setPhotoFailed(false);
     setProfilePhoto({
@@ -62,7 +69,7 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
   const classificationLeadId = selectedChat?.leadId ?? linkedLead?.id;
   useEffect(() => {
     const phone = params.get("phone");
-    if (phone && /^\d{10,15}$/.test(phone))
+    if (!backup && (params.get("accountId") || "default") === accountId && phone && /^\d{10,15}$/.test(phone))
       setChat({
         id: phone + "@s.whatsapp.net",
         name: phone,
@@ -71,7 +78,7 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
         archived: false,
         pinnedAt: 0,
       });
-  }, [params]);
+  }, [params, accountId, backup]);
   async function startConversation(contact: SharedContact) {
     setError("");
     try {
@@ -134,26 +141,6 @@ export function ChatPage({ backup = false }: { backup?: boolean }) {
       <section className="panel chat-layout">
         <aside className="chat-sidebar">
           <div className="chat-search">
-            {backup && user?.isAdmin && (
-              <select
-                className="history-user-select"
-                aria-label="Usuário do histórico"
-                value={historyUser}
-                onChange={(e) => {
-                  setHistoryUser(e.target.value);
-                  setChat(undefined);
-                }}
-              >
-                <option value="">Meu histórico</option>
-                {catalog?.users
-                  .filter((u) => u.id !== user.id)
-                  .map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name}
-                    </option>
-                  ))}
-              </select>
-            )}
             <div className="search-field">
               <Search size={16} />
               <input

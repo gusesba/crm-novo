@@ -1,3 +1,39 @@
+.whatsapp-accounts {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.whatsapp-account-tabs {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+}
+.whatsapp-account-tabs button {
+  flex-shrink: 0;
+  padding: 12px 18px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.whatsapp-account-tabs button[aria-selected="true"] {
+  border-bottom-color: var(--green);
+  color: var(--green);
+  font-weight: 600;
+}
+.whatsapp-account-tabs button:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: -3px;
+}
 .chat-layout {
   display: grid;
   grid-template-columns: 310px minmax(0, 1fr);

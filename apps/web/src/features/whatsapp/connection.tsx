@@ -1,17 +1,19 @@
 "use client";
+import { useWhatsAppApi } from "./account-context";
 import { ErrorBox, Loading, Modal } from "@/components/ui";
-import { useResource } from "@/hooks/use-resource";
-import { post } from "@/lib/api";
+import { useWhatsAppResource as useResource } from "./account-context";
 import { MessageCircle, QrCode, Unplug } from "lucide-react";
 import { useState } from "react";
 export function Connection() {
-  const status = useResource<{ status: string; qr?: string }>(
+  const { post } = useWhatsAppApi();
+  const status = useResource<{ status: string; qr?: string; phone?: string }>(
     "/whatsapp/status",
     5000,
   );
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const unknown = !status.data;
   const connected = status.data?.status === "connected";
   async function action(disconnect = false) {
     setBusy(true);
@@ -35,28 +37,34 @@ export function Connection() {
         <MessageCircle size={28} />
         <div>
           <h3>
-            {connected
+            {unknown
+              ? status.loading ? "Verificando conexão…" : "Status da conexão indisponível"
+              : connected
               ? "Seu WhatsApp está conectado"
               : "Boas conversas começam por uma conexão"}
           </h3>
           <p>
-            {connected
-              ? "Sua sessão pessoal está pronta para atender e enviar mensagens."
+            {unknown
+              ? "Consultando o estado desta conta do WhatsApp."
+              : connected
+              ? `Conta ${status.data?.phone ? "+" + status.data.phone : "WhatsApp"} pronta para atender e enviar mensagens.`
               : "Conecte sua conta pelo QR Code para começar os atendimentos."}
           </p>
         </div>
         <button
           className="button secondary"
-          disabled={busy}
+          disabled={busy || (unknown && status.loading)}
           onClick={() =>
-            connected
+            unknown
+              ? status.reload()
+              : connected
               ? window.confirm("Desconectar esta sessão do WhatsApp?") &&
                 void action(true)
               : void action()
           }
         >
           {connected ? <Unplug size={16} /> : <QrCode size={16} />}{" "}
-          {busy ? "Aguarde…" : connected ? "Desconectar" : "Conectar WhatsApp"}
+          {busy ? "Aguarde…" : unknown ? status.loading ? "Verificando…" : "Verificar conexão" : connected ? "Desconectar" : "Conectar WhatsApp"}
         </button>
       </div>
       {open && (

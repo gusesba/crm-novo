@@ -1,6 +1,6 @@
 "use client";
+import { useWhatsAppApi } from "./account-context";
 import { ErrorBox } from "@/components/ui";
-import { post, put } from "@/lib/api";
 import type { Attachment, Chat, Message, SharedContact } from "@/lib/types";
 import { ContactRound, Paperclip, Send, X } from "lucide-react";
 import { useRef, useState, type FormEvent } from "react";
@@ -24,6 +24,7 @@ export function MessageComposer({
   clearSelection: () => void;
   onSent: () => void;
 }) {
+  const { post, put } = useWhatsAppApi();
   const [text, setText] = useState(editing?.text || "");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const latestAttachments = useRef(attachments);

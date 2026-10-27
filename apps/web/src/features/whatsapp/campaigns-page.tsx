@@ -1,4 +1,5 @@
 "use client";
+import { useWhatsAppApi } from "./account-context";
 import { useApp } from "@/components/providers";
 import {
   Badge,
@@ -7,8 +8,7 @@ import {
   Loading,
   Modal,
 } from "@/components/ui";
-import { useResource } from "@/hooks/use-resource";
-import { post } from "@/lib/api";
+import { useWhatsAppResource as useResource } from "./account-context";
 import { statuses } from "@/lib/format";
 import type { LeadGroup, Lead, LeadClassification, PageResult } from "@/lib/types";
 import { Radio, Send } from "lucide-react";
@@ -19,10 +19,16 @@ import {
 } from "./campaign-message-sequence";
 import { CampaignTracking } from "./campaign-tracking";
 import { Connection } from "./connection";
+import { WhatsAppWorkspace } from "./account-workspace";
 import { CampaignAudienceFilter } from "./campaign-audience-filter";
 import { messageAttachments } from "./attachment";
 import { defaultCampaignTiming, loadCampaignTiming, saveCampaignTiming, type CampaignTiming } from "./campaign-timing";
 export function CampaignsPage() {
+  return <WhatsAppWorkspace><CampaignsContent /></WhatsAppWorkspace>;
+}
+
+function CampaignsContent() {
+  const { post } = useWhatsAppApi();
   const { user, catalog, notify } = useApp();
   const groups = useResource<LeadGroup[]>("/groups");
   const classifications = useResource<LeadClassification[]>("/classifications");
