@@ -15,7 +15,7 @@ type Resolution = {
   exists: boolean;
 };
 
-export function LeadConversationButton({ lead }: { lead: Lead }) {
+export function LeadConversationButton({ lead, className = "text-button" }: { lead: Lead; className?: string }) {
   const router = useRouter();
   const { notify } = useApp();
   const [busy, setBusy] = useState(false);
@@ -67,7 +67,7 @@ export function LeadConversationButton({ lead }: { lead: Lead }) {
       <span>
         <button
           type="button"
-          className="text-button"
+          className={className}
           disabled={busy}
           onClick={() => void chooseAccount()}
         >

@@ -158,7 +158,7 @@ export function LeadForm({
             </button>
           )}
           {lead && lead.currentSellerId === user.id && lead.status !== "Não Enviar Mais" && !busy && (
-            <LeadConversationButton lead={lead} />
+            <LeadConversationButton lead={lead} className="button secondary" />
           )}
           <button type="button" className="button secondary" onClick={onClose}>
             Fechar
