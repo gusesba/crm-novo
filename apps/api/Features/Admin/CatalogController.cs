@@ -26,30 +26,46 @@ public class CatalogController(CrmDbContext db, CurrentUser current) : Controlle
     public async Task<Branch> CreateBranch(NamedRequest r)
     {
         if (current.BranchId.HasValue) throw new BusinessException("Somente o administrador global pode criar sedes.", 403);
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        var normalizedName = r.Name.Trim().ToLowerInvariant();
+        if (await db.Branches.AnyAsync(x => x.Name.Trim().ToLower() == normalizedName))
+            throw new BusinessException("Já existe uma sede com este nome.", 409);
         var item = new Branch { Name = r.Name.Trim(), Active = r.Active };
-        db.Branches.Add(item); await db.SaveChangesAsync(); return item;
+        db.Branches.Add(item); await db.SaveChangesAsync(); await transaction.CommitAsync(); return item;
     }
     [HttpPut("branches/{id:int}"), Authorize(Policy = "admin")]
     public async Task<Branch> UpdateBranch(int id, NamedRequest r)
     {
         current.EnsureBranch(id);
+        await using var transaction = await db.Database.BeginTransactionAsync();
         var item = await db.Branches.FindAsync(id) ?? throw new BusinessException("Sede não encontrada.", 404);
-        item.Name = r.Name.Trim(); item.Active = r.Active; await db.SaveChangesAsync(); return item;
+        var normalizedName = r.Name.Trim().ToLowerInvariant();
+        if (await db.Branches.AnyAsync(x => x.Id != id && x.Name.Trim().ToLower() == normalizedName))
+            throw new BusinessException("Já existe uma sede com este nome.", 409);
+        item.Name = r.Name.Trim(); item.Active = r.Active; await db.SaveChangesAsync(); await transaction.CommitAsync(); return item;
     }
     [HttpPost("items/{kind}"), Authorize(Policy = "admin")]
     public async Task<CatalogItem> CreateItem(string kind, NamedRequest r)
     {
         EnsureGlobalCatalog();
         if (kind != "service" && kind != "condition") throw new BusinessException("Tipo inválido.");
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        var normalizedName = r.Name.Trim().ToLowerInvariant();
+        if (await db.Catalog.AnyAsync(x => x.Kind == kind && x.Name.Trim().ToLower() == normalizedName))
+            throw new BusinessException(kind == "service" ? "Já existe um serviço com este nome." : "Já existe uma condição com este nome.", 409);
         var item = new CatalogItem { Kind = kind, Name = r.Name.Trim(), Active = r.Active };
-        db.Catalog.Add(item); await db.SaveChangesAsync(); return item;
+        db.Catalog.Add(item); await db.SaveChangesAsync(); await transaction.CommitAsync(); return item;
     }
     [HttpPut("items/{id:int}"), Authorize(Policy = "admin")]
     public async Task<CatalogItem> UpdateItem(int id, NamedRequest r)
     {
         EnsureGlobalCatalog();
+        await using var transaction = await db.Database.BeginTransactionAsync();
         var item = await db.Catalog.FindAsync(id) ?? throw new BusinessException("Item não encontrado.", 404);
-        item.Name = r.Name.Trim(); item.Active = r.Active; await db.SaveChangesAsync(); return item;
+        var normalizedName = r.Name.Trim().ToLowerInvariant();
+        if (await db.Catalog.AnyAsync(x => x.Id != id && x.Kind == item.Kind && x.Name.Trim().ToLower() == normalizedName))
+            throw new BusinessException(item.Kind == "service" ? "Já existe um serviço com este nome." : "Já existe uma condição com este nome.", 409);
+        item.Name = r.Name.Trim(); item.Active = r.Active; await db.SaveChangesAsync(); await transaction.CommitAsync(); return item;
     }
     private void EnsureGlobalCatalog()
     {

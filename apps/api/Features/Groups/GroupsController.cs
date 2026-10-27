@@ -32,18 +32,29 @@ public class GroupsController(CrmDbContext db, CurrentUser current) : Controller
     [HttpPost]
     public async Task<object> Create(GroupRequest r)
     {
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        await EnsureUniqueName(r.Name);
         var group = new ContactGroup { Name = r.Name.Trim(), UserId = current.Id };
-        db.Groups.Add(group); await SetMembers(group, r); await db.SaveChangesAsync(); return new { group.Id, group.Name };
+        db.Groups.Add(group); await SetMembers(group, r); await db.SaveChangesAsync(); await transaction.CommitAsync(); return new { group.Id, group.Name };
     }
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, GroupRequest r)
     {
-        var group = await Find(id); group.Name = r.Name.Trim();
-        await SetMembers(group, r); await db.SaveChangesAsync(); return NoContent();
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        var group = await Find(id);
+        await EnsureUniqueName(r.Name, id);
+        group.Name = r.Name.Trim();
+        await SetMembers(group, r); await db.SaveChangesAsync(); await transaction.CommitAsync(); return NoContent();
     }
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id) { db.Groups.Remove(await Find(id)); await db.SaveChangesAsync(); return NoContent(); }
     private async Task<ContactGroup> Find(int id) => await db.Groups.Include(x => x.Members).SingleOrDefaultAsync(x => x.Id == id && x.UserId == current.Id) ?? throw new BusinessException("Grupo não encontrado.", 404);
+    private async Task EnsureUniqueName(string name, int? id = null)
+    {
+        var normalizedName = name.Trim().ToLowerInvariant();
+        if (await db.Groups.AnyAsync(x => x.UserId == current.Id && (!id.HasValue || x.Id != id) && x.Name.Trim().ToLower() == normalizedName))
+            throw new BusinessException("Já existe um grupo com este nome.", 409);
+    }
     private IQueryable<Lead> AccessibleLeads()
     {
         var query = current.Scope(db.Leads);
