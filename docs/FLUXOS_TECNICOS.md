@@ -50,6 +50,8 @@ Fluxo de remoção de contas adicionais do WhatsApp, com desconexão, cancelamen
 
 Fluxos de backup textual por número, consolidação de sessões do mesmo número e troca de identidade da conexão revisados em **27/10/2026** (3.4, 11.0, 12–18).
 
+Fluxo de inicialização local do frontend na porta 3002 revisado em **29/10/2026** (2.3).
+
 “Todos os fluxos” significa os caminhos de negócio e as ramificações explícitas implementadas, incluindo sucesso, validação, autorização, cancelamento, falha parcial e processamento automático. Falhas genéricas compartilhadas estão na seção 3 e se aplicam às operações posteriores. Não é uma homologação de uma conta real do WhatsApp nem uma promessa de compatibilidade do protocolo externo.
 
 Os exemplos usam JSON com propriedades camelCase, como recebido/enviado pelo navegador. IDs, nomes e datas são ilustrativos. Caminhos de código são relativos à raiz do repositório; links deste documento apontam para os arquivos efetivamente pesquisados.
@@ -98,6 +100,14 @@ Fontes: [Program.cs](../apps/api/Program.cs), [SeedData.cs](../apps/api/Infrastr
 2. Campanhas persistidas com `running` ou `queued` tornam-se `interrupted`, com erro informando reinício. Não há retomada automática.
 3. Registra rotas Fastify e passa a ouvir. Executa a retenção de mídia se habilitada e agenda nova execução a cada hora conforme 10.4; falha é registrada sem derrubar o serviço. `restoreSessions()` roda em segundo plano: busca usuários com `auth.key='creds'` e chama `connect` para cada um.
 4. Se restaurar uma sessão falhar, registra o erro; o servidor permanece disponível. A restauração não consulta o cadastro ativo do CRM.
+
+### 2.3 Execução local do frontend
+
+Fontes: [package.json da raiz](../package.json), [package.json do frontend](../apps/web/package.json), [next.config.ts](../apps/web/next.config.ts).
+
+- `npm run dev` na raiz inicia API, frontend e serviço WhatsApp. O script do frontend também pode ser executado com `npm run dev -w apps/web` e usa `next dev --port 3002`, servindo em `http://localhost:3002`.
+- As chamadas `/api/*` continuam encaminhadas pelo Next.js para `http://localhost:5080/api/*` por padrão, ou para o destino configurado em `API_URL`. O serviço WhatsApp usa a porta 3080 por padrão.
+- Se a porta 3002 estiver ocupada, o frontend falha ao iniciar; a porta explícita impede a escolha automática de outra porta. Na execução conjunta, `concurrently -k` encerra os demais processos quando um termina. Interromper o comando também encerra os serviços iniciados por ele.
 
 ## 3. Contratos e regras compartilhadas
 

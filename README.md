@@ -12,7 +12,7 @@ dotnet restore Autoescola.slnx
 npm run dev
 ```
 
-Abra **http://localhost:3000**. O comando inicia o frontend (3000), a API (5080) e o serviço WhatsApp (3080). A API aplica as migrações e cria o banco na primeira execução.
+Abra **http://localhost:3002**. O comando inicia o frontend (3002), a API (5080) e o serviço WhatsApp (3080). A API aplica as migrações e cria o banco na primeira execução.
 
 O `npm ci` aplica automaticamente um patch local na Baileys instalada para tratar edições de mensagens. Origem na PR #2743, arquivos modificados, situação upstream em 27/10/2026 e procedimento de atualização/remoção estão documentados em [Correção local da Baileys](docs/FLUXOS_TECNICOS.md#152-correção-local-da-baileys-origem-e-manutenção).
 
