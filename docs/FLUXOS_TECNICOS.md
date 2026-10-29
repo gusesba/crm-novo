@@ -52,6 +52,8 @@ Fluxos de backup textual por número, consolidação de sessões do mesmo númer
 
 Fluxo de inicialização local do frontend na porta 3002 revisado em **29/10/2026** (2.3).
 
+Fluxo de acesso ao frontend em desenvolvimento pelo Cloudflare Tunnel revisado em **29/10/2026** (2.3).
+
 “Todos os fluxos” significa os caminhos de negócio e as ramificações explícitas implementadas, incluindo sucesso, validação, autorização, cancelamento, falha parcial e processamento automático. Falhas genéricas compartilhadas estão na seção 3 e se aplicam às operações posteriores. Não é uma homologação de uma conta real do WhatsApp nem uma promessa de compatibilidade do protocolo externo.
 
 Os exemplos usam JSON com propriedades camelCase, como recebido/enviado pelo navegador. IDs, nomes e datas são ilustrativos. Caminhos de código são relativos à raiz do repositório; links deste documento apontam para os arquivos efetivamente pesquisados.
@@ -107,6 +109,7 @@ Fontes: [package.json da raiz](../package.json), [package.json do frontend](../a
 
 - `npm run dev` na raiz inicia API, frontend e serviço WhatsApp. O script do frontend também pode ser executado com `npm run dev -w apps/web` e usa `next dev --port 3002`, servindo em `http://localhost:3002`.
 - As chamadas `/api/*` continuam encaminhadas pelo Next.js para `http://localhost:5080/api/*` por padrão, ou para o destino configurado em `API_URL`. O serviço WhatsApp usa a porta 3080 por padrão.
+- Para acesso em desenvolvimento pelo Cloudflare Tunnel, `next.config.ts` permite explicitamente a origem `crm.gusesba.com` em `allowedDevOrigins`. O túnel deve encaminhar esse domínio ao frontend na porta 3002, incluindo o upgrade WebSocket de `/_next/hmr`. Esse socket serve apenas ao recarregamento automático do Next.js; os dados do CRM continuam usando HTTP/polling conforme 3.4. Localhost permanece permitido pelo Next.js. Outra origem precisa ser adicionada explicitamente à configuração, sem protocolo ou porta; reinicie o frontend após alterar a lista. Origem não permitida bloqueia recursos internos de desenvolvimento e encerra o upgrade, podendo aparecer como `502` pelo túnel; isso não demonstra falha de autenticação, que usa `/api/auth/*`. Uma interrupção desse socket impede atualizações automáticas do código e o cliente tenta reconectar, sem encerrar a sessão CRM nem a conexão Baileys. A permissão só é usada em desenvolvimento; produção não usa HMR.
 - Se a porta 3002 estiver ocupada, o frontend falha ao iniciar; a porta explícita impede a escolha automática de outra porta. Na execução conjunta, `concurrently -k` encerra os demais processos quando um termina. Interromper o comando também encerra os serviços iniciados por ele.
 
 ## 3. Contratos e regras compartilhadas

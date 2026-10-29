@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 const config: NextConfig = {
   output: "standalone",
+  allowedDevOrigins: ["crm.gusesba.com"],
   async rewrites() {
     return [
       {
