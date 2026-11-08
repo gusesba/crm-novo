@@ -8,7 +8,9 @@ Fluxos de filtro por período e exportação de leads/vendas para Excel revisado
 
 Fluxos de ordenação pelos cabeçalhos das listagens de leads/vendas e do Excel revisados em **23/10/2026** (6.1 e 6.9).
 
-Fluxo de filtro por dia nos agendamentos revisado em **23/10/2026** (8.1).
+Fluxo de filtro por dia nos agendamentos revisado em **08/11/2026** (8.1), com o dia atual do navegador selecionado por padrão.
+
+Fluxos de cadastro/edição de leads, permissões de campos por perfil e máscara de telefones revisados em **08/11/2026** (6.3 e 6.4).
 
 Fluxo de transferência permanente de leads entre sedes pelo administrador global revisado em **23/10/2026** (6.7).
 
@@ -305,6 +307,8 @@ Navegação de Transferidos: [shell.tsx](../apps/web/src/components/shell.tsx) e
 
 1. “Novo lead”, no dashboard/listagens, ou “Criar lead” no chat → modal. Usa sede do usuário ou primeira sede ativa e filtra vendedores elegíveis no catálogo.
 2. Submit coleta FormData, converte IDs/valor para números, vazios opcionais para null e data/hora local do retorno para ISO UTC.
+   Nome, contato principal, sede, vendedor e status são obrigatórios no formulário e validados na API; sede/vendedor devem ter IDs positivos e status deve ser válido. O status inicial continua Agendar Contato. Data/hora do retorno torna-se obrigatória no navegador quando a observação contém texto; a API também rejeita observação sem data, tanto no cadastro quanto na edição. Nome contendo somente espaços é bloqueado no front e no back. Demais campos continuam opcionais, sujeitos às validações existentes quando preenchidos; escolher Venda Efetivada não torna serviço/condição/valor positivo obrigatórios.
+   [PhoneInput](../apps/web/src/features/leads/phone-input.tsx) e [phoneMask](../apps/web/src/lib/phone-mask.ts) exibem máscara progressiva de DDD/fixo/celular nos dois telefones; DDI brasileiro explícito ou número brasileiro completo com DDI aparece como `+55 (DD) ...`, sem truncar internacionais. A máscara não acrescenta validação de formato. O campo oculto enviado no FormData preserva o valor original enquanto não houver edição, inclusive telefones adicionais históricos bloqueados para vendedores; ao editar envia dígitos e eventual `+`, mantendo a normalização já existente do principal na API. Fechar/cancelar não grava a máscara nem os demais campos pendentes.
 3. Envia `POST /api/leads` com o contrato abaixo (mesmo contrato é usado no PUT):
 
 ```json
@@ -345,7 +349,7 @@ Navegação de Transferidos: [shell.tsx](../apps/web/src/components/shell.tsx) e
 1. Modal existente → submit com `PUT /api/leads/{id}`, mesmo payload, SellerId original e Revision recebida.
 2. Repete validações da criação e busca no escopo. Exige admin ou vendedor atual; Revision diferente → `409` pedindo atualização, sem sobrescrever registro.
 3. Não permite mudar BranchId nem SellerId por esse endpoint; instrui usar transferência permanente para mudar o vendedor original ou a sede. A troca de sede exige administrador global e o fluxo 6.7.
-4. Vendedor comum não pode alterar name/phone/additionalPhone/email/gender/birthDate; front usa readOnly/hidden e API compara valores (`403` se mudou). Pode editar origem, indicação, descoberta, motivo, serviço, condição, status, valor e notas.
+4. Vendedor comum só pode editar leads cujo CurrentSellerId seja o próprio usuário, inclusive após transferência temporária; o vendedor original perde edição quando deixa de ser o responsável atual. Front desabilita o formulário e oculta salvar para outros vendedores; API rejeita com `403`, sem gravação. Nos próprios atendimentos não pode alterar name/phone/additionalPhone: o front deixa nome e telefones somente leitura, preservando seus valores, e a API compara com o registro (`403` se mudou). Pode editar email/gender/birthDate, origem, indicação, descoberta, motivo, serviço, condição, status, valor, notas e adicionar retorno. E-mail usa tipo email/limite de 200 caracteres no front e validação de e-mail/tamanho no back; nascimento tem máximo no dia UTC atual nos dois; gênero usa opções fixas no front e valores permitidos no back. Falhas mantêm o modal aberto e não persistem alterações. Vendedor continua bloqueado no formulário; mudanças de responsável/sede exigem transferência administrativa conforme 6.7.
 5. Admin pode alterar contato. Alterar telefone principal limpa ChatId/ChatUserId; não move o histórico pessoal do WhatsApp.
 6. Salva campos, UpdatedAt e Revision. Se ReturnAt foi preenchido, **adiciona** novo agendamento; não atualiza um retorno existente. Retorna Lead → toast, fechamento e reload.
 7. Concorrência também é protegida pelo token EF Revision, mesmo se duas requisições passarem pela comparação inicial.
@@ -467,10 +471,10 @@ Fontes: [appointments-page.tsx](../apps/web/src/features/appointments/appointmen
 
 ### 8.1 Consultar agenda geral, pessoal, por lead, dia e concluídos
 
-1. `/appointments` → `GET /api/appointments?mine=false&includeCompleted=false&page=1&pageSize=10`.
+1. `/appointments` → `GET /api/appointments?mine=false&includeCompleted=false&page=1&pageSize=10&dueFrom=...&dueTo=...`, com os limites do dia atual no fuso do navegador.
 2. Minha agenda muda mine para true; checkbox Mostrar concluídos inclui concluídos **junto dos pendentes**; ambos redefinem página.
 3. `?lead=42` acrescenta leadId e faz `GET /api/leads/42` para nome/exibição. Link “Ver toda a agenda” remove filtro.
-4. Campo “Dia” começa vazio (todas as datas). Selecionar uma data redefine a página para 1 e acrescenta `dueFrom` (meia-noite local convertida para ISO UTC) e `dueTo` (meia-noite local do dia seguinte convertida para ISO UTC). Exemplo no UTC−3: dia 10/02/2001 envia `dueFrom=2001-02-10T03:00:00.000Z&dueTo=2001-02-11T03:00:00.000Z`. “Limpar data” ou apagar o campo remove os dois limites e volta à página 1. Combina com agenda pessoal, concluídos e lead; trocar esses filtros mantém o dia selecionado. Selecionar/limpar não grava dados.
+4. Campo “Dia” começa preenchido com o dia atual no fuso do navegador, calculado ao abrir a agenda, e já aplica `dueFrom` (meia-noite local convertida para ISO UTC) e `dueTo` (meia-noite local do dia seguinte convertida para ISO UTC). Selecionar outra data redefine a página para 1 e atualiza os limites. Exemplo no UTC−3: dia 10/02/2001 envia `dueFrom=2001-02-10T03:00:00.000Z&dueTo=2001-02-11T03:00:00.000Z`. “Limpar data” ou apagar o campo remove os dois limites, exibe todas as datas e volta à página 1. Combina com agenda pessoal, concluídos e lead; trocar esses filtros mantém o dia selecionado. Selecionar/limpar não grava dados.
 5. API junta Appointment com leads no escopo e filtra LeadId/BranchId/CurrentSellerId/conclusão e os limites opcionais `DueAt >= dueFrom` e `DueAt < dueTo` **antes** de contar/paginar. Ordena DueAt, depois Id; limita página/tamanho como leads. Datas malformadas ou início maior que fim retornam `400`; falha da consulta mostra ErrorBox com tentativa novamente. Nenhum filtro amplia o escopo de sede.
 6. Retorna `{items:[{id,leadId,dueAt,note,completed,leadName,phone,currentSellerId,branchId}],total,page,pageSize}`. Sem resultados no dia, mostra “Nenhum retorno neste dia” e orienta escolher outra data ou limpar o filtro.
 7. Data/hora são mostradas no fuso do navegador; retorno vencido e pendente ganha indicador visual local. Não existe notificação agendada/cron de retorno.
@@ -1172,7 +1176,7 @@ Foram conferidos os cenários declarados na suíte existente, sem executar envio
 | [WhatsAppAccountTests.cs](../tests/Crm.Api.Tests/WhatsAppAccountTests.cs), [multiple-accounts.test.ts](../apps/whatsapp/test/multiple-accounts.test.ts), [whatsapp-account.test.ts](../apps/web/test/whatsapp-account.test.ts) | Contas persistidas por dono, sessão legada, seleção explícita/concorrente, isolamento de histórico/credenciais/ações, escopo administrativo, CSRF/validação/falha e resolução de leads/campanhas na conta escolhida |
 | [BusinessFlowTests.cs](../tests/Crm.Api.Tests/BusinessFlowTests.cs) | CSRF, escopo, telefone único, transferências, OptOut, retornos, grupos e elegibilidade |
 | [AppointmentDateFilterTests.cs](../tests/Crm.Api.Tests/AppointmentDateFilterTests.cs) | Filtro por dia antes da paginação, limites UTC do dia local, datas inválidas, carteira/lead/sede/conclusão e isolamento de acesso |
-| [LeadScopeTests.cs](../tests/Crm.Api.Tests/LeadScopeTests.cs), [LeadEditingTests.cs](../tests/Crm.Api.Tests/LeadEditingTests.cs) | Leitura/edição por sede/carteira, proteção de contato, exclusão |
+| [LeadScopeTests.cs](../tests/Crm.Api.Tests/LeadScopeTests.cs), [LeadEditingTests.cs](../tests/Crm.Api.Tests/LeadEditingTests.cs), [lead-fields.test.ts](../apps/web/test/lead-fields.test.ts) | Leitura/edição por sede/carteira, nome/telefones exclusivos do admin, edição pessoal/comercial pelo vendedor atual, obrigatórios/validações, mudança de acesso após transferência, máscara sem alterar valores bloqueados e exclusão |
 | [LeadBranchTransferTests.cs](../tests/Crm.Api.Tests/LeadBranchTransferTests.cs) | Transferência permanente entre sedes exclusiva do admin global, validação de sede/vendedor/telefones, rejeição atômica, preservação de vínculos e mudança de escopo dos retornos |
 | [TransferredLeadTests.cs](../tests/Crm.Api.Tests/TransferredLeadTests.cs) | Consulta de origem própria com atendimento alheio, escopo/permissões, filtros original/atual, paginação/Excel, validação e evolução após transferência/devolução/permanente |
 | [LeadExportTests.cs](../tests/Crm.Api.Tests/LeadExportTests.cs), [api-download.test.ts](../apps/web/test/api-download.test.ts) | XLSX validado pelo schema OpenXML, exportação além da paginação, filtros combinados incluindo período local com limites opcionais e inclusivos por dia, rejeição de datas inválidas/invertidas, escopo de sede/carteira, classificação pessoal, vazio/validação/autenticação, tipos/formatos do Excel, textos literais sem fórmulas, download binário, liberação da URL, cancelamento e preservação de JSON/CSRF |

@@ -30,10 +30,7 @@ public class LeadEditingTests
     [InlineData("name")]
     [InlineData("phone")]
     [InlineData("additionalPhone")]
-    [InlineData("email")]
-    [InlineData("gender")]
-    [InlineData("birthDate")]
-    public async Task OnlyAdminCanEditContact(string field)
+    public async Task OnlyAdminCanEditNameAndPhones(string field)
     {
         using var factory = new ApiFactory();
         using var seller = await factory.Login("camila");
@@ -45,14 +42,90 @@ public class LeadEditingTests
             case "name": request.Name = "Novo nome"; break;
             case "phone": request.Phone = "5551988882002"; break;
             case "additionalPhone": request.AdditionalPhone = "5551988882003"; break;
-            case "email": request.Email = "cliente@example.com"; break;
-            case "gender": request.Gender = "Outro"; break;
-            case "birthDate": request.BirthDate = new DateOnly(2000, 1, 1); break;
         }
         Assert.Equal(HttpStatusCode.Forbidden, (await seller.PutAsJsonAsync($"/api/leads/{lead.Id}", request)).StatusCode);
         var unchanged = await seller.GetFromJsonAsync<Lead>($"/api/leads/{lead.Id}");
         Assert.Equal(lead.Revision, unchanged!.Revision);
         (await admin.PutAsJsonAsync($"/api/leads/{lead.Id}", request)).EnsureSuccessStatusCode();
+    }
+
+    [Fact]
+    public async Task CurrentSellerCanEditPersonalAndCommercialFields()
+    {
+        using var factory = new ApiFactory();
+        using var seller = await factory.Login("camila");
+        var lead = await Create(seller);
+        var request = Request(lead);
+        request.Email = "cliente@example.com";
+        request.Gender = "Outro";
+        request.BirthDate = new DateOnly(2000, 1, 1);
+        request.Origin = "redes sociais";
+        request.Referral = "Maria";
+        request.Discovery = "Instagram";
+        request.ChoiceReason = "Localização";
+        request.ServiceId = 1;
+        request.ConditionId = 6;
+        request.Status = LeadStatuses.Won;
+        request.Value = 1200.50m;
+        request.Notes = "Matrícula confirmada";
+        var response = await seller.PutAsJsonAsync($"/api/leads/{lead.Id}", request);
+        response.EnsureSuccessStatusCode();
+        var updated = (await seller.GetFromJsonAsync<Lead>($"/api/leads/{lead.Id}"))!;
+        Assert.Equal(request.Email, updated.Email);
+        Assert.Equal(request.Gender, updated.Gender);
+        Assert.Equal(request.BirthDate, updated.BirthDate);
+        Assert.Equal(request.Origin, updated.Origin);
+        Assert.Equal(request.Referral, updated.Referral);
+        Assert.Equal(request.Discovery, updated.Discovery);
+        Assert.Equal(request.ChoiceReason, updated.ChoiceReason);
+        Assert.Equal(request.ServiceId, updated.ServiceId);
+        Assert.Equal(request.ConditionId, updated.ConditionId);
+        Assert.Equal(request.Status, updated.Status);
+        Assert.Equal(request.Value, updated.Value);
+        Assert.Equal(request.Notes, updated.Notes);
+        Assert.Equal(lead.Name, updated.Name);
+        Assert.Equal(lead.Phone, updated.Phone);
+        Assert.Equal(lead.AdditionalPhone, updated.AdditionalPhone);
+        Assert.Equal(lead.SellerId, updated.SellerId);
+        Assert.Equal(lead.CurrentSellerId, updated.CurrentSellerId);
+    }
+
+    [Theory]
+    [InlineData("branch")]
+    [InlineData("seller")]
+    [InlineData("name")]
+    [InlineData("phone")]
+    [InlineData("status")]
+    [InlineData("return")]
+    [InlineData("email")]
+    [InlineData("gender")]
+    [InlineData("birthDate")]
+    public async Task CreateAndEditRejectMissingRequiredFieldsAndInvalidPersonalData(string field)
+    {
+        using var factory = new ApiFactory();
+        using var seller = await factory.Login("camila");
+        var lead = await Create(seller);
+        var request = Request(lead);
+        request.Phone = "5551988882002";
+        switch (field)
+        {
+            case "branch": request.BranchId = 0; break;
+            case "seller": request.SellerId = 0; break;
+            case "name": request.Name = "   "; break;
+            case "phone": request.Phone = ""; break;
+            case "status": request.Status = ""; break;
+            case "return": request.ReturnNote = "Ligar amanhã"; break;
+            case "email": request.Email = "email inválido"; break;
+            case "gender": request.Gender = "Inválido"; break;
+            case "birthDate": request.BirthDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)); break;
+        }
+        Assert.Equal(HttpStatusCode.BadRequest, (await seller.PostAsJsonAsync("/api/leads", request)).StatusCode);
+        if (field != "phone") request.Phone = lead.Phone;
+        Assert.Equal(HttpStatusCode.BadRequest, (await seller.PutAsJsonAsync($"/api/leads/{lead.Id}", request)).StatusCode);
+        var unchanged = (await seller.GetFromJsonAsync<Lead>($"/api/leads/{lead.Id}"))!;
+        Assert.Equal(lead.Revision, unchanged.Revision);
+        Assert.Equal(lead.Name, unchanged.Name);
+        Assert.Equal(lead.Phone, unchanged.Phone);
     }
 
     [Fact]
@@ -112,11 +185,17 @@ public class LeadEditingTests
         Assert.Equal(3, lead.CurrentSellerId);
         request = Request(lead);
         request.Notes = "Atendimento pelo vendedor atual";
+        request.Email = "atual@example.com";
+        request.Gender = "Feminino";
+        request.BirthDate = new DateOnly(1995, 2, 3);
         Assert.Equal(HttpStatusCode.Forbidden, (await original.PutAsJsonAsync($"/api/leads/{lead.Id}", request)).StatusCode);
         updated = await assigned.PutAsJsonAsync($"/api/leads/{lead.Id}", request);
         updated.EnsureSuccessStatusCode();
         lead = (await updated.Content.ReadFromJsonAsync<Lead>())!;
         Assert.Equal(request.Notes, lead.Notes);
+        Assert.Equal(request.Email, lead.Email);
+        Assert.Equal(request.Gender, lead.Gender);
+        Assert.Equal(request.BirthDate, lead.BirthDate);
     }
 
     [Fact]

@@ -33,6 +33,7 @@ export function LeadForm({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [returnNote, setReturnNote] = useState("");
   if (!catalog || !user) return null;
   const canEdit = !lead || user.isAdmin || lead.currentSellerId === user.id;
   const sellers = catalog.users.filter(
@@ -109,7 +110,7 @@ export function LeadForm({
           </div>
           <CustomerFields lead={lead} initial={initial} readOnly={!!lead && !user.isAdmin} />
           {lead && !user.isAdmin && (
-            <p className="form-note">Somente o administrador pode editar os dados de contato.</p>
+            <p className="form-note">Somente o administrador pode editar o nome e os telefones.</p>
           )}
           <div className="form-section-title">
             <FileText size={18} />
@@ -130,12 +131,14 @@ export function LeadForm({
             </h3>
           </div>
           <div className="form-grid">
-            <Field label="Data e horário do retorno">
-              <input name="returnAt" type="datetime-local" />
+            <Field label={`Data e horário do retorno${returnNote.trim() ? " *" : ""}`}>
+              <input name="returnAt" type="datetime-local" required={!!returnNote.trim()} />
             </Field>
             <Field label="Observação do retorno">
               <input
                 name="returnNote"
+                value={returnNote}
+                onChange={(event) => setReturnNote(event.target.value)}
                 placeholder="O que precisamos conversar?"
                 maxLength={2000}
               />

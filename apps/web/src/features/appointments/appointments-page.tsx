@@ -27,7 +27,13 @@ export function AppointmentsPage() {
   const leadId = params.get("lead");
   const [mine, setMine] = useState(false);
   const [completed, setCompleted] = useState(false);
-  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  });
   const [page, setPage] = useState(1);
   const [create, setCreate] = useState(false);
   const [edit, setEdit] = useState<Appointment>();

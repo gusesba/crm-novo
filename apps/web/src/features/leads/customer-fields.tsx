@@ -1,6 +1,7 @@
 "use client";
 import { Field } from "@/components/ui";
 import type { Lead } from "@/lib/types";
+import { PhoneInput } from "./phone-input";
 export function CustomerFields({
   lead,
   initial,
@@ -18,25 +19,25 @@ export function CustomerFields({
           readOnly={readOnly}
           defaultValue={lead?.name || initial?.name}
           required
+          pattern={".*\\S.*"}
+          title="Informe o nome do cliente."
           maxLength={160}
           placeholder="Como o cliente se chama?"
         />
       </Field>
       <Field label="Contato principal *">
-        <input
+        <PhoneInput
           name="phone"
           readOnly={readOnly}
-          type="tel"
           defaultValue={lead?.phone || initial?.phone}
           required
           placeholder="(51) 99999-9999"
         />
       </Field>
       <Field label="Telefone adicional">
-        <input
+        <PhoneInput
           name="additionalPhone"
           readOnly={readOnly}
-          type="tel"
           defaultValue={lead?.additionalPhone || ""}
           placeholder="Outro número de contato"
         />
@@ -44,8 +45,8 @@ export function CustomerFields({
       <Field label="E-mail">
         <input
           name="email"
-          readOnly={readOnly}
           type="email"
+          maxLength={200}
           defaultValue={lead?.email || ""}
           placeholder="cliente@email.com"
         />
@@ -53,14 +54,13 @@ export function CustomerFields({
       <Field label="Data de nascimento">
         <input
           name="birthDate"
-          readOnly={readOnly}
           type="date"
+          max={new Date().toISOString().slice(0, 10)}
           defaultValue={lead?.birthDate || ""}
         />
       </Field>
       <Field label="Gênero">
-        {readOnly && <input type="hidden" name="gender" value={lead?.gender || ""} />}
-        <select name="gender" defaultValue={lead?.gender || ""} disabled={readOnly}>
+        <select name="gender" defaultValue={lead?.gender || ""}>
           <option value="">Selecione</option>
           {["Masculino", "Feminino", "Outro", "Prefiro não informar"].map(
             (s) => (
