@@ -237,6 +237,40 @@ test("marcar lida confirma recibos e estado remoto antes de limpar o contador", 
   assert.equal(stored.pinnedAt, 100);
 });
 
+test("leitura restaura timestamp Long do histórico persistido antes de confirmar no WhatsApp", async () => {
+  const user = "read-persisted-long";
+  const timestamp = 1794107859;
+  saveMessage(user, proto.WebMessageInfo.fromObject({
+    key: { id: "long", remoteJid: chat, fromMe: false },
+    messageTimestamp: { low: timestamp, high: 0, unsigned: true },
+    message: { conversation: "Olá" },
+  }));
+  const stored = db.prepare("SELECT raw FROM messages WHERE user_id=? AND id=?").get(user, "long") as { raw: string };
+  assert.equal(typeof JSON.parse(stored.raw).messageTimestamp, "object");
+  saveChatState(user, { id: chat, unreadCount: 1 });
+  const { calls, fake } = socket();
+  const result = await readChat(user, chat, "long", () => ({
+    ...fake,
+    chatModify: async (patch, jid) => {
+      assert.ok("markRead" in patch);
+      if ("markRead" in patch && Array.isArray(patch.lastMessages))
+        assert.equal(Number(patch.lastMessages[0].messageTimestamp), timestamp);
+      await fake.chatModify(patch, jid);
+    },
+  }));
+  assert.deepEqual(calls.map((call) => call.kind), ["receipts", "modify"]);
+  assert.deepEqual(result, { chatId: chat, unreadCount: 0, markedUnread: false });
+});
+
+test("referência sem timestamp continua rejeitada sem recibos nem limpeza do contador", async () => {
+  const user = "read-missing-timestamp";
+  message(user);
+  db.prepare("UPDATE messages SET raw=json_remove(raw,'$.messageTimestamp') WHERE user_id=?").run(user);
+  saveChatState(user, { id: chat, unreadCount: 2 });
+  await assert.rejects(readChat(user, chat, "last", () => { throw new Error("Não deve chamar socket"); }), { statusCode: 409 });
+  assert.equal(chatUnreadState(user, chat)?.unreadCount, 2);
+});
+
 test("falha de conexão, recibo ou patch mantém o contador e propaga erro", async () => {
   for (const stage of ["socket", "receipt", "modify"]) {
     const user = `read-failure-${stage}`;

@@ -1,4 +1,4 @@
-import { BufferJSON, type WAMessage, type WASocket } from "@whiskeysockets/baileys";
+import { BufferJSON, proto, type WAMessage, type WASocket } from "@whiskeysockets/baileys";
 import { connectedSocket } from "../sessions/manager.js";
 import { db } from "../storage/database.js";
 import { chatUnreadState, clearChatUnread, saveChatState } from "../storage/chat-states.js";
@@ -18,7 +18,7 @@ export async function readChat(
     "SELECT raw,timestamp FROM messages WHERE user_id=? AND chat_id=? AND id=?",
   ).get(user, chatId, lastMessageId) as { raw: string; timestamp: number } | undefined;
   if (!row) throw Object.assign(new Error("Mensagem da conversa não encontrada."), { statusCode: 404 });
-  const last = JSON.parse(row.raw, BufferJSON.reviver) as WAMessage;
+  const last = proto.WebMessageInfo.fromObject(JSON.parse(row.raw, BufferJSON.reviver)) as WAMessage;
   if (!usableKey(last) || !Number(last.messageTimestamp))
     throw Object.assign(new Error("Sincronize as mensagens antes de marcar a conversa como lida."), { statusCode: 409 });
   saveChatState(user, { id: chatId });
