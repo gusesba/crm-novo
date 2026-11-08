@@ -13,7 +13,7 @@ public class LeadService(CrmDbContext db, CurrentUser current)
     {
         current.EnsureBranch(r.BranchId);
         if (!LeadStatuses.All.Contains(r.Status)) throw new BusinessException("Status inválido.");
-        if (!new[] { "presencialmente", "fone", "site", "redes sociais" }.Contains(r.Origin)) throw new BusinessException("Origem inválida.");
+        if (!new[] { "presencialmente", "fone", "site", "redes sociais", "não informado" }.Contains(r.Origin)) throw new BusinessException("Origem inválida.");
         if (r.Gender != null && !new[] { "Masculino", "Feminino", "Outro", "Prefiro não informar" }.Contains(r.Gender)) throw new BusinessException("Gênero inválido.");
         if (r.BirthDate > DateOnly.FromDateTime(DateTime.UtcNow)) throw new BusinessException("A data de nascimento não pode estar no futuro.");
         if (!string.IsNullOrWhiteSpace(r.ReturnNote) && r.ReturnAt == null) throw new BusinessException("Informe a data do retorno.");

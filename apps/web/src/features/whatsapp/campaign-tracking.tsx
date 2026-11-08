@@ -57,13 +57,18 @@ export function CampaignTracking() {
   const [page, setPage] = useState(1);
   const [expanded, setExpanded] = useState<string>();
   const [error, setError] = useState("");
-  const result = useResource<PageResult<Campaign>>(
+  const result = useResource<PageResult<Campaign> & { phone: string | null }>(
     `/whatsapp/campaigns?page=${page}&pageSize=${pageSize}`,
     4000,
   );
   useEffect(() => {
     if (result.data && page > 1 && !result.data.items.length) setPage(page - 1);
   }, [page, result.data]);
+  useEffect(() => {
+    setPage(1);
+    setExpanded(undefined);
+    setError("");
+  }, [result.data?.phone]);
 
   async function cancel(campaign: Campaign) {
     try {
@@ -80,7 +85,7 @@ export function CampaignTracking() {
       <div className="panel-heading">
         <div>
           <h2>Acompanhamento dos envios</h2>
-          <p>Resultado de cada destinatário e histórico dos disparos</p>
+          <p>{!result.data ? "Resultado de cada destinatário e histórico dos disparos" : result.data.phone ? `Histórico do número +${result.data.phone}` : "Conecte um número para acompanhar seus disparos."}</p>
         </div>
       </div>
       {error && <ErrorBox message={error} />}
@@ -104,6 +109,7 @@ export function CampaignTracking() {
                 <div>
                   <h3>{campaign.name}</h3>
                   <small>
+                    {campaign.senderPhone ? `+${campaign.senderPhone}` : "Número de origem não identificado"} · {" "}
                     {date(campaign.createdAt)} · {campaign.total} destinatários
                     · {campaign.messageCount}{" "}
                     {campaign.messageCount === 1 ? "mensagem" : "mensagens"} por

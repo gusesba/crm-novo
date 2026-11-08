@@ -29,6 +29,8 @@ Os telefones e clientes do seed são **fictícios**. Não use a carteira demonst
 
 ## Funcionalidades
 
+Para migrar usuários, sedes, serviços, condições, leads e agendamentos a partir do backup PostgreSQL do CRM antigo, consulte [Migração do CRM antigo](docs/MIGRACAO_AUTOESCOLA.md). O procedimento audita conflitos e gera um SQLite separado antes da ativação.
+
 - Login com cookie HttpOnly, proteção CSRF, expiração, limitação de tentativas e invalidação de sessões ao alterar usuários.
 - Dashboard administrativo com indicadores, evolução por data de captação, distribuição de status, ranking de vendedores e próximos retornos. Filtros de período e sede.
 - Leads e vendas no mesmo cadastro, com todos os campos comerciais da especificação, filtros, busca e paginação. Controle de edição concorrente por revisão.

@@ -71,7 +71,7 @@ export function CustomerFields({
       </Field>
       <Field label="Origem">
         <select name="origin" defaultValue={lead?.origin || "site"}>
-          {["site", "redes sociais", "presencialmente", "fone"].map((s) => (
+          {["site", "redes sociais", "presencialmente", "fone", "não informado"].map((s) => (
             <option key={s}>{s}</option>
           ))}
         </select>

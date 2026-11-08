@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\apps\api\Crm.Api.csproj" />
+    <ProjectReference Include="..\..\tools\LegacyMigration\LegacyMigration.csproj" />
   </ItemGroup>
 
 </Project>

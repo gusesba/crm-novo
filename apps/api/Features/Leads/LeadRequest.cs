@@ -20,7 +20,7 @@ public class LeadRequest
     public int? ServiceId { get; set; }
     public int? ConditionId { get; set; }
     [Required] public string Status { get; set; } = LeadStatuses.Contact;
-    [Range(0, 100000000)] public decimal Value { get; set; }
+    [Range(typeof(decimal), "0", "100000000")] public decimal Value { get; set; }
     [MaxLength(5000)] public string? Notes { get; set; }
     public DateTime? ReturnAt { get; set; }
     [MaxLength(2000)] public string? ReturnNote { get; set; }

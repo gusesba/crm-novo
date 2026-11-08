@@ -23,10 +23,19 @@ public class AuthController(CrmDbContext db, CurrentUser current) : ControllerBa
     {
         var user = await db.Users.SingleOrDefaultAsync(x => x.Username == request.Username.Trim().ToLower());
         var hasher = new PasswordHasher<User>();
-        if (user is null || !user.Active || hasher.VerifyHashedPassword(user, user.PasswordHash, request.Password) == PasswordVerificationResult.Failed)
+        var verification = user is { Active: true } ? PasswordCompatibility.Verify(user, request.Password) : PasswordVerificationResult.Failed;
+        if (user is null || verification == PasswordVerificationResult.Failed)
             throw new BusinessException("Usuário ou senha inválidos.", 401);
         if (user.BranchId.HasValue && !await db.Branches.AnyAsync(x => x.Id == user.BranchId && x.Active))
             throw new BusinessException("Sua sede está inativa.", 403);
+        if (verification == PasswordVerificationResult.SuccessRehashNeeded)
+        {
+            var upgradedHash = hasher.HashPassword(user, request.Password);
+            var updated = await db.Users.Where(x => x.Id == user.Id && x.PasswordHash == user.PasswordHash
+                && x.SecurityStamp == user.SecurityStamp && x.Active)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.PasswordHash, upgradedHash));
+            if (updated != 1) throw new BusinessException("Usuário ou senha inválidos.", 401);
+        }
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, user.Id.ToString()), new(ClaimTypes.Name, user.Name),

@@ -147,6 +147,7 @@ export interface LeadGroup {
 }
 export interface Campaign {
   id: string;
+  senderPhone: string | null;
   name: string;
   total: number;
   messageCount: number;

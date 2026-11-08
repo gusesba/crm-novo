@@ -8,33 +8,33 @@ import type { CampaignInput } from "../messaging/schemas.js";
 import { deliver } from "./deliver.js";
 import { sendToPhone } from "./send-to-phone.js";
 import { sessionOwner } from "../sessions/session-id.js";
+import { accountPhone } from "../storage/backups.js";
+import { campaignScope, scopedCampaign } from "../storage/campaign-numbers.js";
 
 const controllers = new Map<string, AbortController>();
 const running = new Map<string, Promise<void>>();
 const activeUsers = new Set<string>();
 export function campaignMessages(user: string, id: string) {
-  const campaign = db
-    .prepare("SELECT payload FROM campaigns WHERE user_id=? AND id=?")
-    .get(user, id) as { payload: string } | undefined;
-  if (!campaign)
-    throw Object.assign(new Error("Disparo não encontrado."), { statusCode: 404 });
+  scopedCampaign(user, id);
+  const campaign = db.prepare("SELECT payload FROM campaigns WHERE id=?").get(id) as { payload: string };
   const payload = JSON.parse(campaign.payload) as CampaignInput & CampaignInput["messages"][number];
   return payload.messages || (payload.text || payload.attachment
     ? [{ text: payload.text, attachment: payload.attachment }]
     : []);
 }
 export function campaigns(user: string, page: number, pageSize: number) {
+  const scope = campaignScope(user);
   const total = (
     db
-      .prepare("SELECT COUNT(*) AS total FROM campaigns WHERE user_id=?")
-      .get(user) as { total: number }
+      .prepare(`SELECT COUNT(*) AS total FROM campaigns WHERE ${scope.condition}`)
+      .get(...scope.params) as { total: number }
   ).total;
   const items = db
     .prepare(
-      "SELECT id, json_extract(payload,'$.name') AS name, json_array_length(payload,'$.recipients') AS total, COALESCE(json_array_length(payload,'$.messages'),1) AS messageCount, status, sent, failed, skipped, error, created_at AS createdAt FROM campaigns WHERE user_id=? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+      `SELECT id, sender_phone AS senderPhone, json_extract(payload,'$.name') AS name, json_array_length(payload,'$.recipients') AS total, COALESCE(json_array_length(payload,'$.messages'),1) AS messageCount, status, sent, failed, skipped, error, created_at AS createdAt FROM campaigns WHERE ${scope.condition} ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?`,
     )
-    .all(user, pageSize, (page - 1) * pageSize);
-  return { items, total, page, pageSize };
+    .all(...scope.params, pageSize, (page - 1) * pageSize);
+  return { items, total, page, pageSize, phone: scope.phone };
 }
 export function campaignDeliveries(
   user: string,
@@ -43,14 +43,7 @@ export function campaignDeliveries(
   pageSize: number,
   status?: string,
 ) {
-  if (
-    !db
-      .prepare("SELECT id FROM campaigns WHERE id=? AND user_id=?")
-      .get(id, user)
-  )
-    throw Object.assign(new Error("Disparo não encontrado."), {
-      statusCode: 404,
-    });
+  scopedCampaign(user, id);
   const condition = status ? " AND status=?" : "";
   const params = status ? [id, status] : [id];
   const total = (
@@ -68,7 +61,9 @@ export function campaignDeliveries(
   return { items, total, page, pageSize };
 }
 export function createCampaign(user: string, input: CampaignInput) {
-  connectedSocket(user);
+  const phone = accountPhone(connectedSocket(user).user?.id);
+  if (!phone)
+    throw Object.assign(new Error("Não foi possível identificar o número conectado. Reconecte o WhatsApp."), { statusCode: 409 });
   if (
     activeUsers.has(user) ||
     db
@@ -83,8 +78,8 @@ export function createCampaign(user: string, input: CampaignInput) {
   const controller = new AbortController();
   controllers.set(id, controller);
   db.prepare(
-    "INSERT INTO campaigns(id,user_id,payload,status,created_at) VALUES(?,?,?,'running',?)",
-  ).run(id, user, JSON.stringify(input), Date.now());
+    "INSERT INTO campaigns(id,user_id,owner_id,sender_phone,payload,status,created_at) VALUES(?,?,?,?,?,'running',?)",
+  ).run(id, user, sessionOwner(user), phone, JSON.stringify(input), Date.now());
   const insertDelivery = db.prepare(
     "INSERT INTO campaign_deliveries(campaign_id,position,lead_id,name,phone) VALUES(?,?,?,?,?)",
   );
@@ -101,23 +96,19 @@ export function createCampaign(user: string, input: CampaignInput) {
   return { id };
 }
 export function cancelCampaign(user: string, id: string) {
-  if (
-    !db
-      .prepare("SELECT id FROM campaigns WHERE id=? AND user_id=?")
-      .get(id, user)
-  )
-    throw Object.assign(new Error("Disparo não encontrado."), {
-      statusCode: 404,
-    });
+  scopedCampaign(user, id);
+  return cancelCampaignById(id);
+}
+function cancelCampaignById(id: string) {
   controllers.get(id)?.abort();
   db.prepare(
-    "UPDATE campaigns SET status='cancelled' WHERE id=? AND user_id=? AND status='running'",
-  ).run(id, user);
+    "UPDATE campaigns SET status='cancelled' WHERE id=? AND status='running'",
+  ).run(id);
   return { cancelled: true };
 }
 export function cancelSessionCampaigns(user: string) {
   const campaigns = db.prepare("SELECT id FROM campaigns WHERE user_id=? AND status='running'").all(user) as { id: string }[];
-  for (const campaign of campaigns) cancelCampaign(user, campaign.id);
+  for (const campaign of campaigns) cancelCampaignById(campaign.id);
 }
 async function run(
   id: string,
