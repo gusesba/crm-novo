@@ -6,7 +6,7 @@ import {
 } from "@whiskeysockets/baileys";
 import { db } from "./database.js";
 
-export function sqliteAuth(userId: string) {
+export function sqliteAuth(userId: string, isCurrent = () => true) {
   const read = (key: string) => {
     const row = db
       .prepare("SELECT value FROM auth WHERE user_id=? AND key=?")
@@ -14,6 +14,7 @@ export function sqliteAuth(userId: string) {
     return row ? JSON.parse(row.value, BufferJSON.reviver) : null;
   };
   const write = (key: string, value: unknown) => {
+    if (!isCurrent()) return;
     if (value == null)
       db.prepare("DELETE FROM auth WHERE user_id=? AND key=?").run(userId, key);
     else
@@ -38,6 +39,7 @@ export function sqliteAuth(userId: string) {
         return result;
       },
       async set(data) {
+        if (!isCurrent()) return;
         db.exec("BEGIN");
         try {
           for (const [type, values] of Object.entries(data))

@@ -52,6 +52,8 @@ export function backupMessage(session: string, id: string) {
   if (row) copyMessage(session, number, row);
 }
 export function backupDetachedMessage(session: string, number: string, message: WAMessage) {
+  // Uma confirmação tardia não deve recriar o histórico que o dono já limpou.
+  if (!db.prepare("SELECT 1 FROM backup_numbers WHERE owner_id=? AND number=?").get(sessionOwner(session), number)) return;
   const content = normalizeMessageContent(message.message);
   const chatId = message.key.remoteJid?.endsWith("@lid") && message.key.remoteJidAlt?.endsWith("@s.whatsapp.net")
     ? message.key.remoteJidAlt : message.key.remoteJid;
@@ -156,6 +158,31 @@ export function backupNumbers(owner: string) {
 function ensureNumber(owner: string, number: string) {
   if (!db.prepare("SELECT 1 FROM backup_numbers WHERE owner_id=? AND number=?").get(owner, number))
     throw Object.assign(new Error("Backup deste número não encontrado."), { statusCode: 404 });
+}
+export function numberSessions(owner: string, number: string) {
+  const rows = db.prepare("SELECT session_id FROM session_numbers WHERE phone=?").all(number) as { session_id: string }[];
+  const sessions = rows.map((row) => row.session_id).filter((session) => sessionOwner(session) === owner);
+  const legacySession = number.startsWith("legacy_") ? number.slice(7) : undefined;
+  if (legacySession && sessionOwner(legacySession) === owner && !sessionNumber(legacySession)) sessions.push(legacySession);
+  return sessions;
+}
+export function clearNumberData(owner: string, number: string) {
+  ensureNumber(owner, number);
+  const sessions = numberSessions(owner, number);
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    for (const session of sessions) {
+      for (const table of ["messages", "chats", "contacts", "contact_names", "chat_states", "message_reactions", "profile_pictures", "media_cache", "pending_message_edits", "service_state", "auth"])
+        db.prepare(`DELETE FROM ${table} WHERE user_id=?`).run(session);
+      db.prepare("DELETE FROM session_numbers WHERE session_id=?").run(session);
+    }
+    for (const table of ["backup_messages", "backup_chats", "backup_numbers"])
+      db.prepare(`DELETE FROM ${table} WHERE owner_id=? AND number=?`).run(owner, number);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 }
 export function backupChats(owner: string, number: string) {
   ensureNumber(owner, number);

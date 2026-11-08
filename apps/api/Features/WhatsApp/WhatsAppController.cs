@@ -36,6 +36,12 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
     [HttpGet("backup/numbers")]
     public async Task<JsonElement> BackupNumbers(int? userId)
         => await client.SendGlobal(HttpMethod.Get, $"backups/{await HistoryUser(userId)}/numbers");
+    [HttpDelete("backup/numbers/{number}")]
+    public async Task<JsonElement> ClearNumber([RegularExpression(@"^(\d{10,15}|legacy_\d+(?:_[a-f0-9]{32})?)$")] string number, int? userId)
+    {
+        if (userId.HasValue && userId != current.Id) throw new BusinessException("Você só pode limpar os dados dos seus próprios números.", 403);
+        return await client.SendGlobal(HttpMethod.Delete, $"backups/{current.Id}/{Uri.EscapeDataString(number)}");
+    }
     [HttpGet("backup/chats")]
     public async Task<object> BackupChats([Required, RegularExpression(@"^(\d{10,15}|legacy_\d+(?:_[a-f0-9]{32})?)$")] string number, int? userId)
     {

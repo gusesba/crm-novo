@@ -1,4 +1,5 @@
 import { connectedSocket } from "../sessions/manager.js";
+import { sessionNumber } from "../storage/backups.js";
 import {
   saveProfilePicture,
   storedProfilePicture,
@@ -12,6 +13,7 @@ export async function profilePicture(
   user: string,
   chatId: string,
 ): Promise<StoredProfilePicture | undefined> {
+  const number = sessionNumber(user);
   const cached = storedProfilePicture(user, chatId);
   if (cached && Date.now() - cached.updatedAt < refreshAfterMs) return cached;
 
@@ -22,6 +24,7 @@ export async function profilePicture(
       10_000,
     );
     if (!url) {
+      if (number !== sessionNumber(user)) return;
       saveProfilePicture(user, chatId, null, null);
       return storedProfilePicture(user, chatId);
     }
@@ -37,9 +40,10 @@ export async function profilePicture(
     const data = new Uint8Array(await response.arrayBuffer());
     if (data.byteLength > maxPictureBytes)
       throw new Error("Foto de perfil excede o limite permitido.");
+    if (number !== sessionNumber(user)) return;
     saveProfilePicture(user, chatId, mime, data);
     return storedProfilePicture(user, chatId);
   } catch {
-    return cached;
+    return number === sessionNumber(user) ? cached : undefined;
   }
 }

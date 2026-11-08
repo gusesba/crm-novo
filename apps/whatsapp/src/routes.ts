@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { db } from "./storage/database.js";
 import { listMessages, listRecentStickers } from "./storage/messages.js";
-import { connect, connectedSocket, disconnect, sessionStatus } from "./sessions/manager.js";
+import { canClearNumber, clearNumber, connect, connectedSocket, disconnect, sessionStatus } from "./sessions/manager.js";
 import { resolvePhone } from "./messaging/resolve-phone.js";
 import { sessionIdSchema } from "./sessions/session-id.js";
 import { backupNumbers, backupChats, backupMessages } from "./storage/backups.js";
@@ -40,7 +40,17 @@ import {
 
 export async function registerRoutes(app: FastifyInstance) {
   const backupParams = z.object({ owner: z.string().regex(/^\d+$/), number: z.string().regex(/^(\d{10,15}|legacy_\d+(?:_[a-f0-9]{32})?)$/).optional() });
-  app.get("/backups/:owner/numbers", async (req) => backupNumbers(backupParams.parse(req.params).owner));
+  app.get("/backups/:owner/numbers", async (req) => {
+    const { owner } = backupParams.parse(req.params);
+    return backupNumbers(owner).map((item) => {
+      const number = item as { id: string };
+      return { ...number, canClear: canClearNumber(owner, number.id) };
+    });
+  });
+  app.delete("/backups/:owner/:number", async (req) => {
+    const { owner, number } = backupParams.required().parse(req.params);
+    return clearNumber(owner, number);
+  });
   app.get("/backups/:owner/:number/chats", async (req) => {
     const { owner, number } = backupParams.parse(req.params);
     return backupChats(owner, number!);

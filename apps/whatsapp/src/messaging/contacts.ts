@@ -3,6 +3,7 @@ import { z } from "zod";
 import { connectedSocket } from "../sessions/manager.js";
 import { db } from "../storage/database.js";
 import { saveContact } from "../storage/contacts.js";
+import { sessionNumber } from "../storage/backups.js";
 
 export const contactChatSchema = z
   .string()
@@ -55,6 +56,7 @@ export async function saveWhatsAppContact(
       ? `${mapped}@lid`
       : undefined;
   const socket = getSocket(user);
+  const number = sessionNumber(user);
   try {
     await socket.addOrEditContact(chatId, {
       firstName,
@@ -74,6 +76,8 @@ export async function saveWhatsAppContact(
     throw error;
   }
   // Não anunciar sucesso local antes da confirmação do app-state remoto.
+  if (number !== sessionNumber(user))
+    throw Object.assign(new Error("Os dados desta conta foram alterados durante a gravação do contato."), { statusCode: 409 });
   db.exec("BEGIN IMMEDIATE");
   try {
     saveContact(user, { id: chatId, phoneNumber: chatId, lid, name: fullName });

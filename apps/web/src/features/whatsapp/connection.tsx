@@ -6,7 +6,7 @@ import { MessageCircle, QrCode, Unplug } from "lucide-react";
 import { useState } from "react";
 export function Connection() {
   const { post } = useWhatsAppApi();
-  const status = useResource<{ status: string; qr?: string; phone?: string }>(
+  const status = useResource<{ status: string; qr?: string; phone?: string; canDisconnect?: boolean }>(
     "/whatsapp/status",
     5000,
   );
@@ -15,6 +15,7 @@ export function Connection() {
   const [error, setError] = useState("");
   const unknown = !status.data;
   const connected = status.data?.status === "connected";
+  const canDisconnect = status.data?.canDisconnect ?? connected;
   async function action(disconnect = false) {
     setBusy(true);
     setError("");
@@ -57,14 +58,14 @@ export function Connection() {
           onClick={() =>
             unknown
               ? status.reload()
-              : connected
+              : canDisconnect
               ? window.confirm("Desconectar esta sessão do WhatsApp?") &&
                 void action(true)
               : void action()
           }
         >
-          {connected ? <Unplug size={16} /> : <QrCode size={16} />}{" "}
-          {busy ? "Aguarde…" : unknown ? status.loading ? "Verificando…" : "Verificar conexão" : connected ? "Desconectar" : "Conectar WhatsApp"}
+          {canDisconnect ? <Unplug size={16} /> : <QrCode size={16} />}{" "}
+          {busy ? "Aguarde…" : unknown ? status.loading ? "Verificando…" : "Verificar conexão" : canDisconnect ? connected ? "Desconectar" : "Cancelar conexão" : "Conectar WhatsApp"}
         </button>
       </div>
       {open && (

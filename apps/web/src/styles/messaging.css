@@ -1206,6 +1206,9 @@ button.message-reply:focus-visible {
   color: #80a46c;
   flex-shrink: 0;
 }
+.number-data-cleanup {
+  margin-bottom: 22px;
+}
 .qr-panel {
   text-align: center;
   padding: 20px;

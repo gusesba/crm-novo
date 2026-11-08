@@ -6,6 +6,7 @@ import type {
 } from "@whiskeysockets/baileys";
 import { proto } from "@whiskeysockets/baileys";
 import { db } from "./database.js";
+import { sessionNumber } from "./backups.js";
 
 let lastUnreadUpdate = 0;
 function unreadUpdateTime() {
@@ -162,6 +163,7 @@ export async function backfillChatStates(
   socket: WASocket,
   state: AuthenticationState,
 ) {
+  const number = sessionNumber(user);
   const status = db
     .prepare(
       `SELECT
@@ -175,6 +177,7 @@ export async function backfillChatStates(
     "app-state-sync-version": { regular_low: null },
   });
   await socket.resyncAppState(["regular_low"], false);
+  if (number !== sessionNumber(user)) return;
   db.prepare("INSERT OR REPLACE INTO service_state VALUES(?,?,?)").run(
     user,
     "chat-state-snapshot-v4",

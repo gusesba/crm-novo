@@ -24,7 +24,8 @@ import {
 import { backfillChatStates, saveChatState } from "../storage/chat-states.js";
 import { syncReadEvents } from "./read-sync.js";
 import { cacheIncomingMedia } from "../messaging/media.js";
-import { accountPhone, bindSessionNumber, sessionNumber } from "../storage/backups.js";
+import { accountPhone, bindSessionNumber, clearNumberData, numberSessions, sessionNumber } from "../storage/backups.js";
+import { sessionOwner } from "./session-id.js";
 import { cancelSessionCampaigns } from "../campaigns/worker.js";
 
 type Session = {
@@ -41,11 +42,41 @@ const logger = pino({ level: process.env.LOG_LEVEL || "warn" });
 
 export function sessionStatus(user: string) {
   const session = sessions.get(user);
+  const historyNumber = sessionNumber(user) || (db.prepare("SELECT 1 FROM backup_numbers WHERE owner_id=? AND number=?").get(sessionOwner(user), `legacy_${user}`) ? `legacy_${user}` : undefined);
   return {
     status: session?.status || "disconnected",
     qr: session?.qr,
     phone: session?.status === "connected" ? session.socket?.user?.id.split(":")[0].split("@")[0] : undefined,
+    historyNumber,
+    canClearHistory: !!historyNumber && canClearNumber(sessionOwner(user), historyNumber),
+    canDisconnect: !!(session && !session.stopped) || !!db.prepare("SELECT 1 FROM auth WHERE user_id=? LIMIT 1").get(user),
   };
+}
+export function canClearNumber(owner: string, number: string) {
+  const affected = numberSessions(owner, number);
+  for (const [id, session] of sessions) {
+    if ((affected.includes(id) || (sessionOwner(id) === owner && accountPhone(session.socket?.user?.id) === number)) &&
+        (!session.stopped || session.status !== "disconnected")) return false;
+  }
+  // Credenciais persistidas podem estar aguardando restauração após reiniciar.
+  return !affected.some((id) => db.prepare("SELECT 1 FROM auth WHERE user_id=? LIMIT 1").get(id));
+}
+export function clearNumber(owner: string, number: string) {
+  if (!canClearNumber(owner, number))
+    throw Object.assign(new Error("Desconecte todas as contas deste número antes de limpar seus dados."), { statusCode: 409 });
+  const affected = numberSessions(owner, number);
+  clearNumberData(owner, number);
+  for (const id of affected) {
+    const session = sessions.get(id);
+    if (session) {
+      session.stopped = true;
+      if (session.timer) clearTimeout(session.timer);
+      session.socket = undefined;
+      sessions.delete(id);
+    }
+    cancelSessionCampaigns(id);
+  }
+  return { number };
 }
 export function connectedSocket(user: string): WASocket {
   const session = sessions.get(user);
@@ -70,7 +101,7 @@ export async function connect(user: string) {
   session.qr = undefined;
   if (session.timer) clearTimeout(session.timer);
   sessions.set(user, session);
-  const { state, saveCreds } = sqliteAuth(user);
+  const { state, saveCreds } = sqliteAuth(user, () => sessions.get(user) === session && !session.stopped);
   const socket = makeWASocket({
     auth: state,
     logger,
@@ -105,9 +136,11 @@ export async function connect(user: string) {
     if (session.socket === socket && !session.stopped) saveCreds();
   });
   socket.ev.on("connection.update", async (update) => {
-    if (session.socket !== socket) return;
+    if (session.socket !== socket || session.stopped) return;
     if (update.qr) {
-      session.qr = await QRCode.toDataURL(update.qr);
+      const qr = await QRCode.toDataURL(update.qr);
+      if (session.socket !== socket || session.stopped) return;
+      session.qr = qr;
       session.status = "qr";
     }
     if (update.connection === "open") {

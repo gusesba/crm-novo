@@ -2,6 +2,7 @@ import { BufferJSON, proto, type WAMessage, type WASocket } from "@whiskeysocket
 import { connectedSocket } from "../sessions/manager.js";
 import { db } from "../storage/database.js";
 import { saveChatState } from "../storage/chat-states.js";
+import { sessionNumber } from "../storage/backups.js";
 
 export async function archiveChat(
   user: string,
@@ -22,10 +23,13 @@ export async function archiveChat(
       statusCode: 409,
     });
 
+  const number = sessionNumber(user);
   await getSocket(user).chatModify({
     archive: archived,
     lastMessages: [{ key: last.key, messageTimestamp: last.messageTimestamp }],
   }, chatId);
+  if (number !== sessionNumber(user))
+    throw Object.assign(new Error("Os dados desta conta foram alterados durante o arquivamento."), { statusCode: 409 });
   saveChatState(user, { id: chatId, archived });
   return { chatId, archived };
 }

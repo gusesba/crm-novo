@@ -4,7 +4,7 @@ import type {
   WASocket,
 } from "@whiskeysockets/baileys";
 import { db } from "./database.js";
-import { backupChatName } from "./backups.js";
+import { backupChatName, sessionNumber } from "./backups.js";
 
 function saveName(user: string, id: string, name: string, priority: number) {
   if (!id || !name.trim()) return;
@@ -75,7 +75,9 @@ export function conversationName(user: string, id: string): string | undefined {
 }
 
 export async function syncGroupNames(user: string, socket: WASocket) {
+  const number = sessionNumber(user);
   const groups = await socket.groupFetchAllParticipating();
+  if (number !== sessionNumber(user)) return;
   for (const group of Object.values(groups))
     saveConversationName(user, group.id, group.subject);
 }
@@ -85,6 +87,7 @@ export async function backfillSavedContacts(
   socket: WASocket,
   state: AuthenticationState,
 ) {
+  const number = sessionNumber(user);
   const counts = db
     .prepare(
       `SELECT
@@ -103,6 +106,7 @@ export async function backfillSavedContacts(
     "app-state-sync-version": { critical_unblock_low: null },
   });
   await socket.resyncAppState(["critical_unblock_low"], true);
+  if (number !== sessionNumber(user)) return;
   db.prepare("INSERT OR REPLACE INTO service_state VALUES(?,?,?)").run(
     user,
     "contacts-snapshot",
