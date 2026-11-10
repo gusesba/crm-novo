@@ -30,6 +30,7 @@ services:
       dockerfile: apps/api/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
       Urls: http://+:5000
       ConnectionStrings__Crm: Data Source=/app/data/crm.db
       Seed__AdminUsername: ${ADMIN_USERNAME:-admin}

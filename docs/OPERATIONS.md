@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | Web | `API_URL` | Destino do rewrite `/api`; configurar também no build de produção |
 | API | `Urls` | Endereço de escuta; padrão local `http://localhost:5080` |
+| API | `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | No Compose, `true` habilita reconhecimento do HTTPS original encaminhado pelo Caddy |
 | API | `ConnectionStrings__Crm` | Conexão SQLite; padrão `Data Source=data/crm.db` |
 | API | `WhatsApp__Url` | URL interna do serviço Node |
 | API | `WhatsApp__Secret` | Segredo compartilhado, obrigatório fora de Development |
@@ -30,6 +31,10 @@ O `compose.yaml` deste projeto contém seu próprio Caddy e usa sua própria red
 5. Confira os dois endpoints HTTPS de health, logs e, pelo frontend novo, login, dados comerciais, envio/recebimento e restauração da sessão WhatsApp. Na Vercel, defina `API_URL=https://api.autoescolasilva.com.br` sem `/api` no final antes do build e mova o domínio do frontend para o projeto novo na mesma equipe, após validar seu endereço `.vercel.app`.
 
 O DNS existente pode ser mantido enquanto os dois subdomínios apontarem para a mesma VM. O Caddy novo obtém e renova certificados automaticamente quando 80/443 estão acessíveis; não exige os certificados antigos. Seus volumes `caddy_data` e `caddy_config` persistem entre reinícios. Se optar por reaproveitar certificados, copie os dados dos volumes antigos para os novos com ambos os Caddys parados; nomes de volumes incluem o nome do projeto Compose e não são compartilhados automaticamente.
+
+O Caddy termina TLS e encaminha HTTP para a API na rede Docker. Por isso, o Compose define `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`: o ASP.NET Core processa `X-Forwarded-Proto`/`X-Forwarded-For` antes da autenticação e do antiforgery, reconhecendo a requisição original como HTTPS. Mantenha `SECURE_COOKIES=true`. Sem esse reconhecimento, a emissão/validação de CSRF falha com `AntiforgeryOptions.Cookie.SecurePolicy = Always, but the current request is not an SSL request`, inclusive antes de verificar a senha. Essa opção confia nos cabeçalhos dos pares da rede interna; a porta da API deve continuar sem publicação no host, com acesso externo pelo Caddy. A opção não é habilitada automaticamente na execução local fora do Compose.
+
+Ao atualizar somente essa configuração, recrie a API com `docker compose up -d --no-deps --force-recreate api`; um simples `restart` não aplica mudanças nas variáveis do Compose. Não exige reconstruir a imagem nem restaurar os bancos. Depois confira `GET /api/auth/csrf` pelo frontend (200) e `GET /api/auth/me` (401 sem sessão, 200 após login).
 
 Se outro processo ainda ocupar 80/443, o Caddy novo não inicia; libere as portas e repita `docker compose up -d caddy`. Se o HTTPS falhar, confira DNS, acesso às portas e `docker compose logs --tail 100 caddy`. Health confirma processo disponível, não sessão WhatsApp conectada. Falha de restauração/migração deve ser resolvida antes de abrir o acesso aos usuários; não apague os bancos. Cancelar o build não troca os serviços antigos. Interromper a publicação depois de iniciar containers pode deixá-los em execução; confira `docker compose ps`.
 
