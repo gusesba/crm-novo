@@ -1,0 +1,7 @@
+api.autoescolasilva.com.br {
+  reverse_proxy api:5000
+}
+
+wa.autoescolasilva.com.br {
+  reverse_proxy whatsapp:3001
+}

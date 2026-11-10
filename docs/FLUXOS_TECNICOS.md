@@ -66,6 +66,8 @@ Fluxos de migração comercial do CRM antigo, compatibilidade de senhas BCrypt, 
 
 Fluxo de revisão incremental das pendências, consolidação por nome/telefone e correção de sede/responsáveis revisado em **07/11/2026** (2.5).
 
+Fluxo de publicação independente na VM com Caddy, domínios/portas do legado e frontend na Vercel revisado em **10/11/2026** (18).
+
 “Todos os fluxos” significa os caminhos de negócio e as ramificações explícitas implementadas, incluindo sucesso, validação, autorização, cancelamento, falha parcial e processamento automático. Falhas genéricas compartilhadas estão na seção 3 e se aplicam às operações posteriores. Não é uma homologação de uma conta real do WhatsApp nem uma promessa de compatibilidade do protocolo externo.
 
 Os exemplos usam JSON com propriedades camelCase, como recebido/enviado pelo navegador. IDs, nomes e datas são ilustrativos. Caminhos de código são relativos à raiz do repositório; links deste documento apontam para os arquivos efetivamente pesquisados.
@@ -92,7 +94,7 @@ Os exemplos usam JSON com propriedades camelCase, como recebido/enviado pelo nav
 | Serviço WhatsApp | Receber/sincronizar mensagens, contatos e estados de chats; persistir edição, reação e revogação | 15 |
 | `/campaigns` | Público por múltiplos status/serviços/sedes/vendedores/classificações pessoais, opção Sem serviço, período de cadastro/grupo/seleção/exclusões, sequência com personalização por primeiro nome/nome completo, prévia local, confirmação, fila, intervalos/pausas lembrados no navegador, acompanhamento por número, resultados/detalhes e cancelamento | 16 |
 | `/backup` | Abas por número já conectado ao usuário, histórico textual sem mídia independente da conexão, consulta administrativa no escopo permitido e limpeza definitiva de número próprio desconectado | 11.5 e 17 |
-| Operação | Health checks, encerramento dos workers/sockets e persistência | 18 |
+| Operação | Publicação na VM com Caddy e frontend na Vercel, health checks, encerramento dos workers/sockets e persistência | 18 |
 | Limites e diferenças reais | Funcionalidades ausentes, divergências e detalhes que alteram o fluxo | 19 |
 
 ## 2. Inicialização e provisionamento
@@ -1069,7 +1071,12 @@ Fontes: [backup-workspace.tsx](../apps/web/src/features/whatsapp/backup-workspac
 
 ## 18. Persistência, health e encerramento
 
-Fontes: [CrmDbContext.cs](../apps/api/Infrastructure/CrmDbContext.cs), [Entities.cs](../apps/api/Domain/Entities.cs), [database.ts](../apps/whatsapp/src/storage/database.ts), [server.ts](../apps/whatsapp/src/server.ts), [compose.yaml](../compose.yaml).
+Fontes: [CrmDbContext.cs](../apps/api/Infrastructure/CrmDbContext.cs), [Entities.cs](../apps/api/Domain/Entities.cs), [database.ts](../apps/whatsapp/src/storage/database.ts), [server.ts](../apps/whatsapp/src/server.ts), [compose.yaml](../compose.yaml), [Caddyfile](../Caddyfile), [operação](OPERATIONS.md#substituir-a-aplicação-antiga-na-vm).
+
+- Publicação na VM: `docker compose up --build -d` inicia Caddy, API e WhatsApp na rede própria deste projeto. O Caddy publica 80/443 e encaminha `api.autoescolasilva.com.br` para `api:5000` e `wa.autoescolasilva.com.br` para `whatsapp:3001`; portas dos serviços não são publicadas no host. API recebe `Urls=http://+:5000` e chama `http://whatsapp:3001`; WhatsApp recebe `PORT=3001` e revalida destinatários em `http://api:5000`. Os padrões locais 5080/3080 e os Dockerfiles não são alterados; as portas são sobrescritas pelo Compose.
+- O frontend de produção fica na Vercel, com `API_URL=https://api.autoescolasilva.com.br` configurada antes do build; o fluxo `/api/*`, cookies e CSRF continua conforme 3.1. O serviço Docker `web` fica no perfil opcional `local`, com build apontando para `http://api:5000`. Para teste HTTP, `SECURE_COOKIES=false` e `docker compose --profile local up --build -d web api whatsapp` iniciam o frontend em 3000 e os dois serviços, sem iniciar o Caddy. O comando não para containers já em execução.
+- Troca do legado: restaura cópia consistente do SQLite/credenciais do projeto novo nos volumes novos antes de iniciar os processos; para os containers antigos para liberar 80/443 e inicia este Compose. Não depende de containers, nomes de volumes ou redes do legado. PostgreSQL e sessões whatsapp-web.js antigos não podem ser restaurados diretamente nos bancos novos. O Caddy obtém/renova certificados para os domínios existentes sem mudar DNS se continuarem apontando para a VM; `caddy_data`/`caddy_config` preservam seu estado. Copiar certificados antigos é opcional e exige ambos os Caddys parados.
+- Falhas da publicação: porta 80/443 ocupada impede iniciar o Caddy; DNS/acesso externo incorretos impedem obter/servir HTTPS. Containers de API/WhatsApp podem já estar em execução nessa falha parcial; confira `docker compose ps` e logs antes de repetir. Build cancelado não altera o legado; interrupção depois de iniciar containers não garante encerrá-los. Restauração/migração inválida deve ser resolvida antes de abrir acesso, preservando os arquivos para diagnóstico. Retorno antes de novas gravações consiste em parar o projeto novo, iniciar o antigo e devolver o domínio do frontend; após novas gravações/envios exige conciliação. Instruções operacionais e restauração estão em OPERATIONS.md.
 
 - CRM: Branches, Users, WhatsAppAccounts, Catalog, Leads, Appointments, Groups, GroupMembers, Classifications e LeadClassifications via EF/SQLite. Índices únicos Username, BranchId+Phone e ChatUserId+ChatId; chave composta ClassificationId+LeadId nos vínculos pessoais. As migrações LeadClassifications e MultipleWhatsAppAccounts criam as tabelas correspondentes no início da API, preservando os registros existentes. Revision é concurrency token só no lead.
 - Relações para sede/usuários/catálogo são restritas na exclusão. Excluir lead elimina retornos e memberships; excluir grupo elimina memberships. Não há histórico de transferências/edições por entidade.

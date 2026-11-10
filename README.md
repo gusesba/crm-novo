@@ -83,11 +83,18 @@ Os resultados de build, testes e conferência visual estão em [validação](doc
 ```powershell
 Copy-Item .env.example .env
 # Edite .env: ADMIN_PASSWORD e SERVICE_SECRET precisam de valores próprios.
-# Para testar em HTTP local, defina SECURE_COOKIES=false.
 docker compose up --build -d
 ```
 
-Somente a porta 3000 é publicada. Bancos, chaves de proteção e sessões ficam em volumes persistentes. Em produção, use HTTPS em um proxy reverso e mantenha `SECURE_COOKIES=true`. O seed de produção cria apenas o administrador configurado e os catálogos básicos; não cria vendedores nem leads demonstrativos.
+O Compose inicia Caddy, API e WhatsApp para substituir a aplicação antiga na VM. O Caddy publica as portas 80/443 e encaminha `api.autoescolasilva.com.br` à API na porta interna 5000 e `wa.autoescolasilva.com.br` ao WhatsApp na porta interna 3001, conforme [Caddyfile](Caddyfile). O frontend fica na Vercel, com `API_URL=https://api.autoescolasilva.com.br` configurada antes do build. A publicação é independente dos containers e da rede do projeto antigo; veja a troca e a restauração dos dados em [operação](docs/OPERATIONS.md#substituir-a-aplicação-antiga-na-vm).
+
+Bancos, chaves de proteção, sessões e certificados ficam em volumes persistentes. Mantenha `SECURE_COOKIES=true` em produção. O seed de produção cria apenas o administrador configurado e os catálogos básicos; não cria vendedores nem leads demonstrativos.
+
+Para testar o frontend Docker em `http://localhost:3000`, defina `SECURE_COOKIES=false` no `.env` e inicie explicitamente os serviços locais, sem o Caddy:
+
+```powershell
+docker compose --profile local up --build -d web api whatsapp
+```
 
 ## Verificação
 
