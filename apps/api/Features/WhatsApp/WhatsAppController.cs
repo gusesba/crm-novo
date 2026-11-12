@@ -247,7 +247,6 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
         var phone = LeadRules.NormalizePhone(number);
         var leads = await current.Scope(db.Leads).Where(x => x.Phone == phone || x.Phone == number).ToListAsync();
         if (leads.Any(x => x.Status == LeadStatuses.OptOut)) throw new BusinessException("Este contato está marcado como Não Enviar Mais.", 403);
-        if (leads.Count > 0 && !leads.Any(x => x.CurrentSellerId == current.Id)) throw new BusinessException("O contato pertence à carteira de outro vendedor.", 403);
     }
 }
 public record AttachmentRequest(string Name, string Mime, string Data, bool VoiceNote = false, bool AsDocument = false);

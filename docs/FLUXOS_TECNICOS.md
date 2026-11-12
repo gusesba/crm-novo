@@ -58,6 +58,8 @@ Fluxos de backup textual por número, consolidação de sessões do mesmo númer
 
 Fluxo de Acompanhamento dos envios por usuário/número conectado, com recuperação da origem dos disparos antigos, revisado em **03/11/2026** (2.2, 11.0, 11.4, 16 e 18).
 
+Fluxo de envio individual e ações de mensagens para leads de outras carteiras da mesma sede revisado em **12/11/2026** (3.2 e 13.1), preservando responsável único e bloqueio Não Enviar Mais; campanhas já permitem esse público (16.1 e 16.5).
+
 Fluxo de inicialização local do frontend na porta 3002 revisado em **29/10/2026** (2.3).
 
 Fluxo de acesso ao frontend em desenvolvimento pelo Cloudflare Tunnel revisado em **29/10/2026** (2.3).
@@ -65,6 +67,8 @@ Fluxo de acesso ao frontend em desenvolvimento pelo Cloudflare Tunnel revisado e
 Fluxos de migração comercial do CRM antigo, compatibilidade de senhas BCrypt, origem não informada e validação decimal de valores revisados em **07/11/2026** (2.4, 4.1 e 6.3).
 
 Fluxo de revisão incremental das pendências, consolidação por nome/telefone e correção de sede/responsáveis revisado em **07/11/2026** (2.5).
+
+Fluxo de inserção incremental de leads recentes do legado no SQLite de produção, com simulação, backup e remapeamento de IDs, documentado em **11/11/2026** (2.6).
 
 Fluxo de publicação independente na VM com Caddy, domínios/portas do legado e frontend na Vercel revisado em **10/11/2026** (18).
 
@@ -78,7 +82,7 @@ Os exemplos usam JSON com propriedades camelCase, como recebido/enviado pelo nav
 
 | Área/página | Funcionalidades implementadas | Fluxos |
 | --- | --- | --- |
-| Inicialização | Migração do CRM, importação comercial offline do legado com auditoria/quarentena, provisionamento, dados demonstrativos condicionais, recuperação de sessões e interrupção de campanhas antigas | 2 |
+| Inicialização | Migração do CRM, importação comercial offline do legado com auditoria/quarentena, inserção incremental de leads recentes, provisionamento, dados demonstrativos condicionais, recuperação de sessões e interrupção de campanhas antigas | 2 |
 | Infraestrutura compartilhada | Proxy HTTP, cookie, CSRF, autorização por sede, erros, carregamento, atualização e notificações | 3 |
 | `/login`, `/` e navegação | Entrar, recuperar sessão, redirecionar por perfil, sair e menu móvel | 4 |
 | `/dashboard` | Indicadores, evolução diária, distribuição de status, ranking, filtros de período/sede, próximos retornos e novo lead | 5 |
@@ -91,7 +95,7 @@ Os exemplos usam JSON com propriedades camelCase, como recebido/enviado pelo nav
 | `/settings/media` | Administrador global consulta espaço de mídia, configura retenção opcional por dias e revisa/confirma limpeza somente de arquivos locais, preservando mensagens | 10.4 |
 | `/whatsapp`, `/campaigns` | Múltiplas contas pessoais em abas, cadastro/remoção de contas adicionais com preservação do backup textual, QR Code, status/telefone, desconexão, reconexão e restauração independentes | 11 |
 | `/whatsapp` | Lista/busca de conversas, visualizações combináveis WhatsApp/status/classificação com grupos recolhíveis, contador de não lidas, leitura automática ao abrir, arquivar/desarquivar, consulta de fixadas, fotos, histórico, mensagens anteriores, nova conversa e bolinhas/seleção múltipla de classificações do lead vinculado | 12 |
-| Compositor e mensagens | Texto com renderização de negrito/itálico/tachado/código no histórico, indicadores de editada/encaminhada, emoji, resposta com autor/prévia da mensagem citada, edição, reação/remoção de reação, encaminhamento, exclusão local/para todos | 12.3 e 13 |
+| Compositor e mensagens | Envio a leads de outras carteiras da sede sem alterar responsáveis, texto com renderização de negrito/itálico/tachado/código no histórico, indicadores de editada/encaminhada, emoji, resposta com autor/prévia da mensagem citada, edição, reação/remoção de reação, encaminhamento, exclusão local/para todos | 12.3 e 13 |
 | Anexos e contatos | Fotos, vídeos, documentos, seleção/colagem de múltiplos anexos por mensagem com remoção individual, áudio, gravação de voz, figurinhas recentes/criadas, vCard, telefone detectado no texto, copiar número, prévia/download de mídia | 14 |
 | Serviço WhatsApp | Receber/sincronizar mensagens, contatos e estados de chats; persistir edição, reação e revogação | 15 |
 | `/campaigns` | Público por múltiplos status/serviços/sedes/vendedores/classificações pessoais, opção Sem serviço, período de cadastro/grupo/seleção/exclusões, sequência com personalização por primeiro nome/nome completo, prévia local, confirmação, fila, intervalos/pausas lembrados no navegador, acompanhamento por número, resultados/detalhes e cancelamento | 16 |
@@ -152,6 +156,17 @@ Fontes: [resolve-legacy-pending.mjs](../scripts/resolve-legacy-pending.mjs), [le
 5. `BEGIN IMMEDIATE` protege a gravação incremental. Confere novamente as sedes dos usuários e as correções auditadas; alteração concorrente ou conflito de ID/telefone/schema aborta e reverte o lote inteiro, inclusive mudanças em leads existentes. Correção de responsabilidade/sede em registro existente preserva os demais campos, incrementa Revision, atualiza UpdatedAt e limpa o vínculo de conversa. Insere leads/retornos aceitos, confere integridade/FKs e confirma. Cancelamento/falha antes do commit não publica parte do lote. Após commit, falha ao produzir um relatório/cópia não desfaz a gravação: conferir `resolution-report.json` e IDs no banco antes de repetir.
 6. Saída inclui backup anterior, candidato validado, snapshot corrigido, originais consolidados, relatório de IDs inseridos/absorvidos/corrigidos e pendências restantes. O relatório começa como `prepared` e muda para `applied_and_verified` após commit. Mantém os relatórios anteriores para rastreabilidade. A base ativa passa a mostrar as inclusões na próxima consulta/atualização da tela; não exige reiniciar a API ou reconectar WhatsApp.
 
+### 2.6 Inserir leads recentes do legado na base de produção
+
+Fontes: [import-legacy-leads.py](../scripts/import-legacy-leads.py), [test_import_legacy_leads.py](../scripts/test_import_legacy_leads.py), [LegacyImporter.cs](../tools/LegacyMigration/LegacyImporter.cs). Pacote e operação na VM: [IMPORTACAO_LEADS_INCREMENTAL.md](IMPORTACAO_LEADS_INCREMENTAL.md).
+
+1. Operador recebe um lote JSON privado no formato `via-crm-leads-v1`, previamente convertido e verificado pelo importador oficial, com originais, conversões e identidade das referências. O lote de **11/11/2026** reúne 30 leads com `DataInicial >= 08/11/2026 00h UTC-3` e seu único agendamento. O nascimento futuro do ID legado 14944 é convertido para nulo, com o original preservado, conforme a regra de 2.5; os demais campos seguem as conversões de 2.4. O agendamento mantém o instante original em UTC. Não há hashes de senha no pacote nem carga de sessões WhatsApp.
+2. Python 3.9+ recebe `--source`, `--database` existente e `--output-dir` novo. Sem `--apply`, abre a base somente para leitura, copia um snapshot consistente para memória pela API SQLite e executa as inclusões/validações nessa cópia. Gera relatório e cópia do lote; não grava no destino. Os IDs dessa simulação são provisórios.
+3. Com `--apply`, cria primeiro o backup consistente `crm-before.db`, abre o destino em modo que não cria banco ausente e inicia `BEGIN IMMEDIATE`. Dentro da transação valida schema, integridade/FKs, IDs/nomes de sedes e catálogo, login/nome/sede/perfil/estado ativo dos responsáveis e compatibilidade das referências do lote. Divergência aborta o lote. O procedimento na VM pausa somente a API durante a aplicação e a retoma ao sair, preservando Caddy e WhatsApp.
+4. O SQLite gera IDs para os leads novos e o relatório registra `legacyId → targetId`; retornos usam o ID efetivo do lead e também recebem IDs novos. Não sobrescreve um ID já ocupado. Mesmo telefone normalizado/sede só é reaproveitado quando há um único candidato com campos comerciais e datas iguais; ID/revisão/vínculo de conversa podem diferir. Divergência bloqueia, sem mesclar. Retorno com mesma data/hora e nota no mesmo lead é reaproveitado, preservando conclusão. Repetição de lote intacto insere zero; alterações posteriores nos campos conferidos exigem revisão.
+5. Usa somente INSERT, sem mudanças em registros anteriores ou outras áreas. Confere os campos gravados, integridade e FKs e grava o mapa no relatório antes do commit (`ready_to_commit`). Sucesso confirma tudo e muda para `applied_and_verified`; a próxima consulta mostra os leads, sem reconectar WhatsApp. Falha/cancelamento antes do commit reverte o lote inteiro. Cancelamento abrupto com relatório ainda em `ready_to_commit` exige conferir os IDs no banco para resolver a incerteza do commit.
+6. Saída contém `batch.json`, `report.json` e, na aplicação, backup anterior. Pasta existente é rejeitada. Falha de relatório após commit não reverte dados: retorna 3 e informa commit concluído, registrando `committed_report_failed` quando possível. Interrupção no retorno do commit sem confirmação do resultado registra `commit_outcome_unknown`, também retorna 3 e pede conferência dos IDs. Erro anterior retorna 1, cancelamento tratado 130, sucesso/simulação 0. A restauração do backup é manual e exige conciliar novas gravações. Não existe endpoint, polling ou importação automática no início da aplicação.
+
 ## 3. Contratos e regras compartilhadas
 
 Fontes: [api.ts](../apps/web/src/lib/api.ts), [use-resource.ts](../apps/web/src/hooks/use-resource.ts), [next.config.ts](../apps/web/next.config.ts), [CurrentUser.cs](../apps/api/Infrastructure/CurrentUser.cs), [AuthenticationSetup.cs](../apps/api/Features/Auth/AuthenticationSetup.cs), [ExceptionHandler.cs](../apps/api/Infrastructure/ExceptionHandler.cs), [WhatsAppClient.cs](../apps/api/Features/WhatsApp/WhatsAppClient.cs).
@@ -181,7 +196,7 @@ Evento no componente → api/post/put → /api/* no mesmo domínio
 
 | Perfil | Leitura de leads/agenda | Edição de lead/agenda | Administração | WhatsApp |
 | --- | --- | --- | --- | --- |
-| Vendedor com sede | Todos os leads da sede; `mine=true` limita ao vendedor atual | Apenas vendedor atual; dados de contato de lead existente são protegidos | Sem endpoints administrativos | Sessão própria; envio individual aplica regra de carteira |
+| Vendedor com sede | Todos os leads da sede; `mine=true` limita ao vendedor atual | Apenas vendedor atual; dados de contato de lead existente são protegidos | Sem endpoints administrativos | Sessão própria; pode enviar a leads de outras carteiras da sede, respeitando Não Enviar Mais |
 | Admin de sede | Apenas sua sede | Qualquer lead da sede | Equipe e edição da própria sede; catálogos compartilhados somente leitura | Sessão própria; pode consultar históricos de usuários da sede |
 | Admin global sem sede | Todas as sedes | Todos os leads; transferência permanente entre sedes | Equipe/sedes/catálogos | Sessão própria; pode consultar históricos de outros usuários |
 
@@ -768,11 +783,11 @@ API `EnsureCanMessage(chatId)`:
 
 1. JID precisa terminar em @s.whatsapp.net; extrai número e normaliza telefone.
 2. Busca leads desse telefone no escopo. Qualquer um com Não Enviar Mais → `403`.
-3. Se existem leads, exige que pelo menos um tenha CurrentSellerId igual ao usuário → `403` caso contrário, inclusive admin.
-4. Se não há leads no escopo com esse telefone, deixa prosseguir. Isso permite atender número não cadastrado.
-5. Serviço restringe JID a 12–15 dígitos para envio/reação/encaminhamento/exclusão. Operações remotas exigem connectedSocket; exceção: excluir somente do CRM não precisa socket.
+3. Não exige CurrentSellerId igual ao usuário: leads de outras carteiras da sede podem receber mensagens pela própria conta de quem envia, inclusive administradores. A ação não altera SellerId, CurrentSellerId, sede, revisão ou vínculo de conversa do lead; continuam valendo as permissões de edição/vinculação do cadastro.
+4. Se não há leads no escopo com esse telefone, deixa prosseguir. Isso permite atender número não cadastrado. A consulta continua restrita ao escopo existente; não concede leitura/edição de leads de outras sedes.
+5. Serviço restringe JID a 12–15 dígitos para envio/reação/encaminhamento/exclusão. Operações remotas exigem connectedSocket; exceção: excluir somente do CRM não precisa socket. Restrições de autoria, conta e prazo para excluir para todos continuam aplicadas pelo serviço conforme as seções seguintes.
 
-Essa mesma regra significa que um contato bloqueado ou que mudou de carteira também pode impedir edição, reação e exclusão local. Não há permissão administrativa especial para essas ações.
+Essa mesma regra significa que um contato com Não Enviar Mais também impede edição, reação e exclusão local, retornando `403` antes de chamar o serviço, sem efeitos parciais. Trocar o vendedor responsável dentro da sede não bloqueia essas ações. Não há exceção administrativa ao bloqueio Não Enviar Mais. Cancelamentos e falhas remotas/parciais mantêm os caminhos de 13.2–13.6; liberar outra carteira não transfere atendimento nem inicia envio automaticamente.
 
 ### 13.2 Texto, enviar e responder
 
@@ -1116,6 +1131,8 @@ Estes pontos são parte do fluxo implementado e devem ser considerados ao valida
 
 ## 20. Rastreabilidade e conferência da documentação
 
+Na liberação de envio para outras carteiras da sede em **12/11/2026**, passaram os 64 casos executados de WhatsAppMessagePermissionTests, CampaignAudienceTests, BusinessFlowTests, LeadScopeTests e LeadEditingTests, com banco isolado, serviço WhatsApp simulado e coleções sem paralelismo. Os 14 casos novos cobrem envio/edição/reação/encaminhamento/exclusão pela própria sessão em lead de outro vendedor, envio por administrador, bloqueio Não Enviar Mais antes de chamar o serviço, telefone sem cadastro, rejeição de grupo e confirmação de campanha com lead de outra carteira. Conferem responsáveis, sede, revisão e vínculo de conversa preservados; os testes existentes verificam unicidade do telefone por sede e permissões de edição/vinculação. Os seis casos de liberação reproduziram `403` antes da correção. Não houve envio real nem alteração no frontend ou no serviço WhatsApp.
+
 Na entrega da limpeza por número de **08/11/2026**, passaram os 11 testes de WhatsAppBackupTests (três novos), os 146 testes do serviço WhatsApp (sete novos em [clear-number.test.ts](../apps/whatsapp/test/clear-number.test.ts)) e os 52 testes do frontend (um novo em [clear-number.test.ts](../apps/web/test/clear-number.test.ts)), além das checagens de tipos e builds de produção do frontend/serviço. Os testes com bancos temporários cobrem exclusão conjunta das sessões do mesmo dono/número, caches/associações/backup, preservação de outros números/donos/resultados, cancelamento de disparos, bloqueio por credenciais até desconectar, rollback da exclusão, legado antes/depois da troca de número, reinicialização sem recriar o histórico, confirmações tardias e chaves de socket parado. A API cobre autenticação/CSRF, limpeza só do próprio dono inclusive para admin, conta da query sem influência, validação e propagação de 404/409/503. O frontend verifica botão bloqueado sem desconexão e confirmação inicialmente fechada. Não houve exclusão de dados reais, conexão com celular ou envio de mensagens para a validação.
 
 Na segunda revisão das pendências de **07/11/2026**, a regra autorizada passou a escolher o registro mais recente por telefone/sede mesmo com nomes diferentes. Os oito testes em [legacy-pending-rules.test.mjs](../scripts/legacy-pending-rules.test.mjs) passaram, incluindo grupos de três registros, redirecionamento de agenda e nascimento futuro convertido para nulo somente nos pendentes, preservando datas válidas e outros erros. Confirmou-se que BirthDate é opcional na entidade, no DTO e no formulário. Após ensaio em clone e backup consistente, entraram 41 leads (39 grupos consolidados e dois nascimentos anulados) e o retorno ID 9; 41 IDs adicionais ficaram mapeados aos sobreviventes. A base chegou a 14.822 leads e 485 agendamentos, com 28 leads pendentes (27 telefones inválidos/ausentes e um valor negativo), sem retornos pendentes. Todos os campos dos 14.781 leads/484 retornos anteriores e das demais tabelas permaneceram iguais; cada inclusão foi comparada com o candidato e os 28 pendentes continuaram com seus dados originais. Integridade/FKs e health/página de login HTTP passaram; relatórios anteriores e backup foram preservados, sem acesso ao servidor ou operação WhatsApp.
@@ -1215,6 +1232,7 @@ Foram conferidos os cenários declarados na suíte existente, sem executar envio
 | [ClassificationTests.cs](../tests/Crm.Api.Tests/ClassificationTests.cs) | Isolamento pessoal inclusive para admin, cores/nomes/payloads inválidos, escopo de leads, seleção múltipla/remoção/cascata, rejeição atômica de IDs alheios, bolinhas com vínculo explícito/backup e etiquetas/filtro pessoal na listagem antes da paginação, combinado com carteira/vendas/serviço/sede/vendedor e preservando o escopo de sede |
 | [GroupLeadTests.cs](../tests/Crm.Api.Tests/GroupLeadTests.cs) | Seleção sem vínculo, filtros combinados incluindo classificação pessoal, privacidade/escopo, revalidação ao salvar e seleção além de cem |
 | [CampaignAudienceTests.cs](../tests/Crm.Api.Tests/CampaignAudienceTests.cs) | Público de outros vendedores, filtros, classificação pessoal antes da paginação, combinação com grupo/seleção/exclusões, revalidação na confirmação e elegibilidade |
+| [WhatsAppMessagePermissionTests.cs](../tests/Crm.Api.Tests/WhatsAppMessagePermissionTests.cs) | Envio/ações pela própria sessão para outras carteiras da sede, responsáveis/vínculo/revisão preservados, Não Enviar Mais, telefone sem cadastro, grupos e confirmação de campanha |
 | [DashboardScopeTests.cs](../tests/Crm.Api.Tests/DashboardScopeTests.cs), [DashboardPeriodTests.cs](../tests/Crm.Api.Tests/DashboardPeriodTests.cs) | Período inclusivo, indicadores e agenda por sede |
 | [UserRegistrationTests.cs](../tests/Crm.Api.Tests/UserRegistrationTests.cs) | Cadastro administrativo e limites de sede |
 | [WhatsAppContactTests.cs](../tests/Crm.Api.Tests/WhatsAppContactTests.cs), [contacts.test.ts](../apps/whatsapp/test/contacts.test.ts) | Agenda da própria sessão, autenticação/CSRF, limites e nomes compostos, confirmação remota antes de gravar, falhas/chave ausente, PN/LID, atualização pelo celular, prioridade sobre histórico e preservação do estado do chat |
