@@ -18,6 +18,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS session_numbers (session_id TEXT PRIMARY KEY, phone TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS backup_numbers (owner_id TEXT, number TEXT, first_connected_at INTEGER NOT NULL, last_connected_at INTEGER NOT NULL, PRIMARY KEY(owner_id,number));
   CREATE TABLE IF NOT EXISTS backup_chats (owner_id TEXT, number TEXT, id TEXT, name TEXT, PRIMARY KEY(owner_id,number,id));
+  CREATE TABLE IF NOT EXISTS backup_chat_aliases (owner_id TEXT, number TEXT, lid TEXT, chat_id TEXT NOT NULL, PRIMARY KEY(owner_id,number,lid));
   CREATE TABLE IF NOT EXISTS backup_messages (owner_id TEXT, number TEXT, chat_id TEXT, id TEXT, timestamp INTEGER NOT NULL, kind TEXT NOT NULL, revision_at INTEGER NOT NULL DEFAULT 0, payload TEXT NOT NULL, PRIMARY KEY(owner_id,number,chat_id,id));
   CREATE INDEX IF NOT EXISTS backup_messages_chat ON backup_messages(owner_id,number,chat_id,timestamp,id);
   CREATE TABLE IF NOT EXISTS pending_message_edits (user_id TEXT,id TEXT,chat_id TEXT,target_id TEXT,timestamp INTEGER,raw TEXT,PRIMARY KEY(user_id,id));

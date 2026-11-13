@@ -15,8 +15,56 @@ export function sessionNumber(session: string) {
 }
 const mediaLabels: Record<string, string> = { image: "Foto", video: "Vídeo", audio: "Áudio", document: "Documento", sticker: "Figurinha" };
 
+export function consolidateBackupChat(session: string, number: string, lid: string, chatId: string) {
+  const owner = sessionOwner(session);
+  db.exec("SAVEPOINT consolidate_backup_chat");
+  try {
+    db.prepare("INSERT OR REPLACE INTO backup_chat_aliases VALUES(?,?,?,?)").run(owner, number, lid, chatId);
+    db.prepare(`INSERT INTO backup_chats SELECT owner_id,number,?,CASE WHEN name=id THEN ? ELSE name END
+      FROM backup_chats WHERE owner_id=? AND number=? AND id=?
+      ON CONFLICT(owner_id,number,id) DO UPDATE SET
+        name=CASE WHEN backup_chats.name=backup_chats.id THEN excluded.name ELSE backup_chats.name END`)
+      .run(chatId, chatId, owner, number, lid);
+    db.prepare(`INSERT INTO backup_messages(owner_id,number,chat_id,id,timestamp,kind,revision_at,payload)
+      SELECT owner_id,number,?,id,timestamp,kind,revision_at,json_set(payload,'$.chatId',?)
+      FROM backup_messages WHERE owner_id=? AND number=? AND chat_id=?
+      ON CONFLICT(owner_id,number,chat_id,id) DO UPDATE SET payload=excluded.payload,kind=excluded.kind,revision_at=excluded.revision_at
+      WHERE backup_messages.kind!='deleted' AND (excluded.kind='deleted' OR
+        (excluded.revision_at>=backup_messages.revision_at AND
+         (COALESCE(json_extract(backup_messages.payload,'$.edited'),0)=0 OR json_extract(excluded.payload,'$.edited')=1)))`)
+      .run(chatId, chatId, owner, number, lid);
+    db.prepare("DELETE FROM backup_messages WHERE owner_id=? AND number=? AND chat_id=?").run(owner, number, lid);
+    db.prepare("DELETE FROM backup_chats WHERE owner_id=? AND number=? AND id=?").run(owner, number, lid);
+    db.exec("RELEASE consolidate_backup_chat");
+  } catch (error) {
+    db.exec("ROLLBACK TO consolidate_backup_chat; RELEASE consolidate_backup_chat");
+    throw error;
+  }
+}
+
+function backupChatId(session: string, number: string, id: string) {
+  if (!id.endsWith("@lid")) return id;
+  const owner = sessionOwner(session);
+  const alias = db.prepare("SELECT chat_id FROM backup_chat_aliases WHERE owner_id=? AND number=? AND lid=?")
+    .get(owner, number, id) as { chat_id: string } | undefined;
+  if (alias) {
+    if (db.prepare("SELECT 1 FROM backup_chats WHERE owner_id=? AND number=? AND id=?").get(owner, number, id))
+      consolidateBackupChat(session, number, id, alias.chat_id);
+    return alias.chat_id;
+  }
+  // Recupera backups anteriores à tabela de aliases somente com prova no mesmo dono/número.
+  const message = db.prepare(`SELECT m.chat_id FROM messages m JOIN session_numbers n ON n.session_id=m.user_id
+    WHERE n.phone=? AND (m.user_id=? OR m.user_id GLOB ?) AND m.chat_id LIKE '%@s.whatsapp.net'
+      AND json_extract(m.raw,'$.key.remoteJid')=? LIMIT 1`)
+    .get(number, owner, owner + "_*", id) as { chat_id: string } | undefined;
+  if (!message || !/^\d{10,15}@s\.whatsapp\.net$/.test(message.chat_id)) return id;
+  consolidateBackupChat(session, number, id, message.chat_id);
+  return message.chat_id;
+}
+
 function copyMessage(session: string, number: string, row: Row) {
   const owner = sessionOwner(session);
+  const chatId = backupChatId(session, number, row.chat_id);
   const raw = JSON.parse(row.raw, BufferJSON.reviver) as StoredMessage;
   const content = normalizeMessageContent(raw.message);
   const sourceMatches = sessionNumber(session) === number || number.startsWith("legacy_");
@@ -29,7 +77,7 @@ function copyMessage(session: string, number: string, row: Row) {
   const reactions = sourceMatches ? db.prepare("SELECT emoji,sender='me' AS mine FROM message_reactions WHERE user_id=? AND message_id=?")
     .all(session, row.id) as { emoji: string; mine: number }[] : [];
   const payload = {
-    id: row.id, chatId: row.chat_id, text: row.text, mine: row.mine, kind: row.kind, timestamp: row.timestamp,
+    id: row.id, chatId, text: row.text, mine: row.mine, kind: row.kind, timestamp: row.timestamp,
     canDeleteForEveryone: false, ...metadata, reply,
     ...(mediaLabels[row.kind] ? { mediaLabel: mediaLabels[row.kind] } : {}),
     ...(contact ? { contact: { name: contact.displayName || "Contato", phone: contact.vcard?.match(/waid=(\d+)/)?.[1] || "" } } : {}),
@@ -40,7 +88,7 @@ function copyMessage(session: string, number: string, row: Row) {
     WHERE backup_messages.kind!='deleted' AND (excluded.kind='deleted' OR
       (excluded.revision_at>=backup_messages.revision_at AND
        (COALESCE(json_extract(backup_messages.payload,'$.edited'),0)=0 OR json_extract(excluded.payload,'$.edited')=1)))`)
-    .run(owner, number, row.chat_id, row.id, row.timestamp, row.kind, raw.crmMetadata?.editedAt || 0, JSON.stringify(payload));
+    .run(owner, number, chatId, row.id, row.timestamp, row.kind, raw.crmMetadata?.editedAt || 0, JSON.stringify(payload));
   const chat = sourceMatches ? db.prepare("SELECT name FROM chats WHERE user_id=? AND id=?").get(session, row.chat_id) as { name: string } | undefined : undefined;
   backupChatName(session, row.chat_id, chat?.name || row.chat_id, number);
 }
@@ -69,17 +117,23 @@ export function backupDetachedMessage(session: string, number: string, message: 
 }
 export function backupChatName(session: string, chatId: string, name: string, number = sessionNumber(session)) {
   if (!number || !sessionIdSchema.safeParse(session).success) return;
+  const id = backupChatId(session, number, chatId);
+  if (name === chatId) name = id;
   db.prepare(`INSERT INTO backup_chats VALUES(?,?,?,?) ON CONFLICT(owner_id,number,id) DO UPDATE SET
     name=CASE WHEN excluded.name!=excluded.id THEN excluded.name ELSE backup_chats.name END`)
-    .run(sessionOwner(session), number, chatId, name);
+    .run(sessionOwner(session), number, id, name);
 }
 export function removeBackupMessage(session: string, chatId: string, id: string) {
   const number = sessionNumber(session);
-  if (number) db.prepare("DELETE FROM backup_messages WHERE owner_id=? AND number=? AND chat_id=? AND id=?")
-    .run(sessionOwner(session), number, chatId, id);
+  if (number) {
+    chatId = backupChatId(session, number, chatId);
+    db.prepare("DELETE FROM backup_messages WHERE owner_id=? AND number=? AND chat_id=? AND id=?")
+      .run(sessionOwner(session), number, chatId, id);
+  }
 }
 export function markBackupMessageDeleted(session: string, number: string, chatId: string, id: string) {
   const owner = sessionOwner(session);
+  chatId = backupChatId(session, number, chatId);
   const row = db.prepare("SELECT payload FROM backup_messages WHERE owner_id=? AND number=? AND chat_id=? AND id=?")
     .get(owner, number, chatId, id) as { payload: string } | undefined;
   if (!row) return;
@@ -176,7 +230,7 @@ export function clearNumberData(owner: string, number: string) {
         db.prepare(`DELETE FROM ${table} WHERE user_id=?`).run(session);
       db.prepare("DELETE FROM session_numbers WHERE session_id=?").run(session);
     }
-    for (const table of ["backup_messages", "backup_chats", "backup_numbers"])
+    for (const table of ["backup_messages", "backup_chats", "backup_chat_aliases", "backup_numbers"])
       db.prepare(`DELETE FROM ${table} WHERE owner_id=? AND number=?`).run(owner, number);
     db.exec("COMMIT");
   } catch (error) {

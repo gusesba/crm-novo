@@ -39,6 +39,8 @@ test("limpeza HTTP elimina todas as sessões do número/dono, caches e backup se
   const other = "40_" + "b".repeat(32);
   for (const session of ["40", extra, "41"]) seed(session);
   seed(other, b);
+  for (const [owner, number] of [["40", a], ["40", b], ["41", a]])
+    db.prepare("INSERT INTO backup_chat_aliases VALUES(?,?,?,?)").run(owner, number, "123456789@lid", chat);
   db.prepare("INSERT INTO contacts VALUES(?,?,?,?)").run(extra, chat, "Contato", 4);
   db.prepare("INSERT INTO contact_names VALUES(?,?,?,?,?)").run(extra, chat, "Contato", "", "Contato");
   db.prepare("INSERT INTO message_reactions VALUES(?,?,?,?)").run(extra, "same", "me", "👍");
@@ -53,6 +55,8 @@ test("limpeza HTTP elimina todas as sessões do número/dono, caches e backup se
     assert.equal(sessionNumber(session), undefined);
   }
   assert.deepEqual(backupNumbers("40").map((row) => row.id), [b]);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM backup_chat_aliases WHERE owner_id='40' AND number=?").get(a)?.count, 0);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM backup_chat_aliases").get()?.count, 2);
   assert.throws(() => backupMessages("40", a, chat), { statusCode: 404 });
   assert.equal(listMessages(other, chat).length, 1);
   assert.equal(backupMessages("41", a, chat).length, 1);
