@@ -14,6 +14,7 @@ const {
   listMessages,
   listRecentStickers,
   rawMessage,
+  messageChatId,
   markMessageDeleted,
   deleteStoredMessage,
   saveMessageReaction,
@@ -34,6 +35,42 @@ const message = (id: string, text = id): WAMessage => ({
   messageTimestamp: 100,
   message: { conversation: text },
   pushName: "Cliente",
+});
+
+test("revogação por LID antes do primeiro polling consolida a original sem exceção", () => {
+  const lid = "523456789@lid";
+  for (const existingPhone of [false, true]) {
+    const user = `revoke-before-poll-${existingPhone}`;
+    saveMessage(user, { ...message("original"), key: { id: "original", remoteJid: lid } });
+    if (existingPhone) saveMessage(user, message("phone"));
+    db.prepare("INSERT INTO auth VALUES(?,?,?)").run(user, "lid-mapping-523456789_reverse", JSON.stringify(chat.split("@")[0]));
+    assert.doesNotThrow(() => saveMessage(user, {
+      key: { id: "revoke", remoteJid: lid }, messageTimestamp: 110,
+      message: { protocolMessage: { type: proto.Message.ProtocolMessage.Type.REVOKE, key: { id: "original", remoteJid: lid } } },
+    }));
+    const rows = listMessages(user, chat);
+    assert.equal(rows.find((row) => row.id === "original")?.kind, "deleted");
+    assert.equal(listChats(user).length, 1);
+    assert.equal(db.prepare("SELECT json_extract(raw,'$.key.remoteJid') AS jid FROM messages WHERE user_id=? AND id='original'").get(user)?.jid, lid);
+  }
+});
+
+test("revogação e exclusão remotas usam a conta para resolver o LID original após consolidação", () => {
+  const user = "remote-delete-lid";
+  const other = "remote-delete-other";
+  const lid = "623456789@lid";
+  for (const session of [user, other])
+    for (const id of ["revoked", "removed"])
+      saveMessage(session, { ...message(id), key: { id, remoteJid: lid } });
+  db.prepare("INSERT INTO auth VALUES(?,?,?)").run(user, "lid-mapping-623456789_reverse", JSON.stringify(chat.split("@")[0]));
+  listChats(user);
+  const revokedChat = messageChatId(rawMessage(user, "revoked")!, user)!;
+  assert.equal(revokedChat, chat);
+  assert.equal(markMessageDeleted(user, "revoked", revokedChat), true);
+  const removedChat = messageChatId(rawMessage(user, "removed")!, user)!;
+  assert.equal(deleteStoredMessage(user, "removed", removedChat), true);
+  assert.deepEqual(listMessages(user, chat).map((row) => [row.id, row.kind]), [["revoked", "deleted"]]);
+  assert.equal(listMessages(other, lid).length, 2);
 });
 
 test("consolida LID e telefone já persistidos sem perder histórico ou estado", () => {

@@ -11,6 +11,7 @@ process.env.DATA_DIR = directory;
 const { db } = await import("../src/storage/database.js");
 const { saveMessage, listMessages, markMessageDeleted, deleteStoredMessage, saveMessageReaction } = await import("../src/storage/messages.js");
 const { saveContact } = await import("../src/storage/contacts.js");
+const { listChats } = await import("../src/storage/chat-states.js");
 const { bindSessionNumber, backupNumbers, backupMessages, backupChats, initializeBackups, sessionNumber } = await import("../src/storage/backups.js");
 const { disconnect } = await import("../src/sessions/manager.js");
 const { sendMessage } = await import("../src/messaging/send.js");
@@ -158,4 +159,98 @@ test("confirmação de envio após troca de número vai somente ao backup origin
   assert.equal(backupMessages("30", a, chat)[0].text, "a.pdf");
   assert.equal(backupMessages("30", b, chat).length, 0);
   assert.equal(db.prepare("SELECT COUNT(*) AS n FROM media_cache WHERE user_id='30'").get()?.n, 0);
+});
+
+test("consolidar LID move o backup e mantém edição, reação, revogação e exclusão na mesma cópia", () => {
+  const user = "31";
+  const lid = "123456789@lid";
+  bindSessionNumber(user, a + "@s.whatsapp.net");
+  saveMessage(user, { ...message("old", "Original"), key: { id: "old", remoteJid: lid } });
+  saveContact(user, { id: lid, name: "Contato salvo" });
+  saveMessage(user, message("phone", "Telefone", 101));
+  db.prepare("INSERT INTO auth VALUES(?,?,?)").run(user, "lid-mapping-123456789_reverse", JSON.stringify(chat.split("@")[0]));
+  listChats(user);
+  assert.deepEqual(backupChats(user, a).map((row) => row.id), [chat]);
+  assert.equal(backupChats(user, a)[0].name, "Contato salvo");
+  assert.equal(backupMessages(user, a, lid).length, 0);
+  assert.deepEqual(backupMessages(user, a, chat).map((row) => [row.id, row.chatId]), [["old", chat], ["phone", chat]]);
+  saveMessage(user, { ...message("old", "Editada"), key: { id: "old", remoteJid: lid },
+    crmMetadata: { edited: true, editedAt: 200 } } as WAMessage);
+  saveMessageReaction(user, "old", "me", "👍");
+  assert.equal(backupMessages(user, a, chat)[0].text, "Editada");
+  assert.deepEqual(backupMessages(user, a, chat)[0].reactions, [{ emoji: "👍", mine: true }]);
+  markMessageDeleted(user, "old", chat);
+  assert.equal(backupMessages(user, a, chat)[0].kind, "deleted");
+  assert.equal(deleteStoredMessage(user, "old", chat), true);
+  assert.deepEqual(backupMessages(user, a, chat).map((row) => row.id), ["phone"]);
+  assert.equal(backupMessages(user, a, lid).length, 0);
+});
+
+test("backup LID já separado do atendimento é reparado sem ressuscitar revogadas nem perder a revisão mais recente", () => {
+  const lid = "223456789@lid";
+  for (const [index, [sourceDeleted, targetDeleted, sourceRevision, targetRevision]] of ([
+    [true, false, 0, 300], [false, true, 300, 0],
+    [false, false, 400, 300], [false, false, 300, 400],
+  ] as const).entries()) {
+    const user = String(320 + index);
+    bindSessionNumber(user, a + "@s.whatsapp.net");
+    saveMessage(user, { ...message("same", "LID"), key: { id: "same", remoteJid: lid } });
+    // Simula o estado legado: atendimento já movido e duas cópias no backup.
+    db.prepare("UPDATE messages SET chat_id=? WHERE user_id=?").run(chat, user);
+    db.prepare("UPDATE chats SET id=? WHERE user_id=?").run(chat, user);
+    db.prepare("UPDATE backup_messages SET kind=?,revision_at=?,payload=json_set(payload,'$.kind',?,'$.text',?,'$.edited',json(?)) WHERE owner_id=?")
+      .run(sourceDeleted ? "deleted" : "text", sourceRevision, sourceDeleted ? "deleted" : "text", sourceDeleted ? "Mensagem apagada" : "LID editado", sourceRevision ? "true" : "false", user);
+    const payload = { id: "same", chatId: chat, text: targetDeleted ? "Mensagem apagada" : "Telefone editado", edited: !!targetRevision, kind: targetDeleted ? "deleted" : "text" };
+    db.prepare("INSERT INTO backup_messages VALUES(?,?,?,?,?,?,?,?)")
+      .run(user, a, chat, "same", 100000, payload.kind, targetRevision, JSON.stringify(payload));
+    db.prepare("INSERT INTO backup_chats VALUES(?,?,?,?)").run(user, a, chat, "Nome telefone");
+    db.prepare("INSERT INTO auth VALUES(?,?,?)").run(user, "lid-mapping-223456789_reverse", JSON.stringify(chat.split("@")[0]));
+    listChats(user);
+    const rows = backupMessages(user, a, chat);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].chatId, chat);
+    assert.equal(rows[0].text, sourceDeleted || targetDeleted ? "Mensagem apagada" : sourceRevision > targetRevision ? "LID editado" : "Telefone editado");
+    assert.equal(rows[0].kind, sourceDeleted || targetDeleted ? "deleted" : "text");
+    assert.equal(backupMessages(user, a, lid).length, 0);
+    assert.deepEqual(backupChats(user, a).map((row) => row.id), [chat]);
+  }
+});
+
+test("consolidação do backup fica no dono e número associados à sessão e exige prova de identidade", () => {
+  const lid = "323456789@lid";
+  for (const [user, number] of [["33", a], ["34", a]]) {
+    bindSessionNumber(user, number + "@s.whatsapp.net");
+    saveMessage(user, { ...message("same", "Original"), key: { id: "same", remoteJid: lid } });
+  }
+  bindSessionNumber("33", b + "@s.whatsapp.net");
+  saveMessage("33", { ...message("current", "Atual"), key: { id: "current", remoteJid: lid } });
+  listChats("33");
+  assert.deepEqual(backupChats("33", b).map((row) => row.id), [lid]);
+  db.prepare("INSERT INTO auth VALUES(?,?,?)").run("33", "lid-mapping-323456789_reverse", JSON.stringify(chat.split("@")[0]));
+  listChats("33");
+  assert.deepEqual(backupChats("33", b).map((row) => row.id), [chat]);
+  assert.deepEqual(backupChats("33", a).map((row) => row.id), [lid]);
+  assert.deepEqual(backupChats("34", a).map((row) => row.id), [lid]);
+  assert.equal(backupMessages("33", a, lid)[0].text, "Original");
+  assert.equal(backupMessages("34", a, lid)[0].text, "Original");
+});
+
+test("falha na consolidação do backup reverte também o atendimento e permite repetir sem perda", () => {
+  const user = "35";
+  const lid = "423456789@lid";
+  bindSessionNumber(user, a + "@s.whatsapp.net");
+  saveMessage(user, { ...message("old", "Original"), key: { id: "old", remoteJid: lid } });
+  db.prepare("INSERT INTO auth VALUES(?,?,?)").run(user, "lid-mapping-423456789_reverse", JSON.stringify(chat.split("@")[0]));
+  db.exec("CREATE TEMP TRIGGER fail_identity_backup BEFORE DELETE ON backup_messages WHEN OLD.owner_id='35' BEGIN SELECT RAISE(ABORT,'identity failure'); END");
+  try {
+    assert.throws(() => listChats(user), /identity failure/);
+    assert.equal(db.prepare("SELECT chat_id FROM messages WHERE user_id=? AND id='old'").get(user)?.chat_id, lid);
+    assert.equal(db.prepare("SELECT id FROM chats WHERE user_id=?").get(user)?.id, lid);
+    assert.equal(backupMessages(user, a, lid)[0].text, "Original");
+    assert.equal(backupMessages(user, a, chat).length, 0);
+  } finally { db.exec("DROP TRIGGER fail_identity_backup"); }
+  listChats(user);
+  listChats(user);
+  assert.equal(backupMessages(user, a, chat).length, 1);
+  assert.equal(backupMessages(user, a, lid).length, 0);
 });

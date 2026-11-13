@@ -1,4 +1,6 @@
 import { db } from "./database.js";
+import { sessionNumber } from "./backups.js";
+import { sessionOwner } from "../sessions/session-id.js";
 
 export function canonicalChatId(user: string, id: string) {
   if (!id.endsWith("@lid")) return id;
@@ -19,7 +21,11 @@ export function canonicalChatId(user: string, id: string) {
 }
 
 export function normalizeChats(user: string) {
-  const chats = db.prepare("SELECT id FROM chats WHERE user_id=? AND id LIKE '%@lid'").all(user) as { id: string }[];
+  const number = sessionNumber(user);
+  const owner = number ? sessionOwner(user) : null;
+  const chats = db.prepare(`SELECT id FROM chats WHERE user_id=? AND id LIKE '%@lid'
+    UNION SELECT id FROM backup_chats WHERE owner_id=? AND number=? AND id LIKE '%@lid'`)
+    .all(user, owner, number ?? null) as { id: string }[];
   db.exec("SAVEPOINT normalize_chats");
   try {
     for (const chat of chats) {
@@ -38,6 +44,23 @@ export function normalizeChats(user: string) {
         WHERE user_id=? AND id=?`).run(user, id, user, id);
       db.prepare("UPDATE messages SET chat_id=? WHERE user_id=? AND chat_id=?").run(id, user, chat.id);
       db.prepare("UPDATE pending_message_edits SET chat_id=? WHERE user_id=? AND chat_id=?").run(id, user, chat.id);
+      if (number) {
+        db.prepare(`INSERT INTO backup_chats SELECT owner_id,number,?,CASE WHEN name=id THEN ? ELSE name END
+          FROM backup_chats WHERE owner_id=? AND number=? AND id=?
+          ON CONFLICT(owner_id,number,id) DO UPDATE SET
+            name=CASE WHEN backup_chats.name=backup_chats.id THEN excluded.name ELSE backup_chats.name END`)
+          .run(id, id, owner, number, chat.id);
+        db.prepare(`INSERT INTO backup_messages(owner_id,number,chat_id,id,timestamp,kind,revision_at,payload)
+          SELECT owner_id,number,?,id,timestamp,kind,revision_at,json_set(payload,'$.chatId',?)
+          FROM backup_messages WHERE owner_id=? AND number=? AND chat_id=?
+          ON CONFLICT(owner_id,number,chat_id,id) DO UPDATE SET payload=excluded.payload,kind=excluded.kind,revision_at=excluded.revision_at
+          WHERE backup_messages.kind!='deleted' AND (excluded.kind='deleted' OR
+            (excluded.revision_at>=backup_messages.revision_at AND
+             (COALESCE(json_extract(backup_messages.payload,'$.edited'),0)=0 OR json_extract(excluded.payload,'$.edited')=1)))`)
+          .run(id, id, owner, number, chat.id);
+        db.prepare("DELETE FROM backup_messages WHERE owner_id=? AND number=? AND chat_id=?").run(owner, number, chat.id);
+        db.prepare("DELETE FROM backup_chats WHERE owner_id=? AND number=? AND id=?").run(owner, number, chat.id);
+      }
       db.prepare("DELETE FROM chats WHERE user_id=? AND id=?").run(user, chat.id);
     }
     db.exec("RELEASE normalize_chats");

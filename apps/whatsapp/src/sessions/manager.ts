@@ -241,7 +241,7 @@ export async function connect(user: string) {
         update.messageStubType === proto.WebMessageInfo.StubType.REVOKE
       ) {
         const previous = rawMessage(user, key.id);
-        const chatId = previous && messageChatId(previous);
+        const chatId = previous && messageChatId(previous, user);
         if (chatId) markMessageDeleted(user, key.id, chatId);
         continue;
       }
@@ -268,7 +268,7 @@ export async function connect(user: string) {
     for (const key of event.keys) {
       if (!key.id) continue;
       const stored = rawMessage(user, key.id);
-      const chatId = stored && messageChatId(stored);
+      const chatId = stored && messageChatId(stored, user);
       if (chatId) deleteStoredMessage(user, key.id, chatId);
     }
   });

@@ -128,12 +128,12 @@ export function saveMessage(user: string, msg: WAMessage, sourceNumber?: string)
   backupMessage(user, msg.key.id!);
   replayEncryptedEdits(user, jid, msg.key.id!, saveMessage);
 }
-export function messageChatId(message: WAMessage, user?: string) {
+export function messageChatId(message: WAMessage, user: string) {
   const id = message.key.remoteJid?.endsWith("@lid") &&
     message.key.remoteJidAlt?.endsWith("@s.whatsapp.net")
     ? message.key.remoteJidAlt
     : message.key.remoteJid;
-  return user && id ? canonicalChatId(user, id) : id;
+  return id ? canonicalChatId(user, id) : id;
 }
 export function canDeleteForEveryone(
   mine: boolean,
@@ -343,6 +343,8 @@ export function saveMessageReaction(
 }
 
 export function markMessageDeleted(user: string, id: string, chatId: string) {
+  normalizeChats(user);
+  chatId = canonicalChatId(user, chatId);
   const original = rawMessage(user, id);
   if (!original || messageChatId(original, user) !== chatId) return false;
   removeStoredMedia(user, id);
@@ -371,6 +373,8 @@ export function markMessageDeleted(user: string, id: string, chatId: string) {
 }
 
 export function deleteStoredMessage(user: string, id: string, chatId: string) {
+  normalizeChats(user);
+  chatId = canonicalChatId(user, chatId);
   const stored = db
     .prepare("SELECT 1 FROM messages WHERE user_id=? AND id=? AND chat_id=?")
     .get(user, id, chatId);
