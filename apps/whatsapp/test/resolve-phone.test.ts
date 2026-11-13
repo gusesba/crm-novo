@@ -39,3 +39,14 @@ test("No match returns null after checking all variants", async () => {
   assert.equal(await resolvePhone("5551999991234", async (phone) => { attempts.push(phone); return []; }), null);
   assert.deepEqual(attempts, phoneVariants("5551999991234"));
 });
+
+test("A Brazilian mobile entered without the ninth digit resolves to the registered variant", async () => {
+  const result = await resolvePhone("555199991234", async (phone) => [
+    { exists: phone === "5551999991234", jid: phone + "@s.whatsapp.net" },
+  ]);
+  assert.deepEqual(result, {
+    phone: "5551999991234",
+    chatId: "5551999991234@s.whatsapp.net",
+    requiresConfirmation: true,
+  });
+});

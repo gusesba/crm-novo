@@ -164,14 +164,7 @@ function ChatContent({ backup }: { backup: boolean }) {
                     "Telefone com DDI e DDD (ex.: 5551999999999)",
                   );
                   if (phone && /^\d{12,15}$/.test(phone.replace(/\D/g, "")))
-                    setChat({
-                      id: phone.replace(/\D/g, "") + "@s.whatsapp.net",
-                      name: phone,
-                      lastText: "",
-                      updatedAt: Date.now(),
-                      archived: false,
-                      pinnedAt: 0,
-                    });
+                    void startConversation({ name: phone, phone: phone.replace(/\D/g, "") });
                   else if (phone)
                     setError("Informe um telefone válido com DDI e DDD.");
                 }}

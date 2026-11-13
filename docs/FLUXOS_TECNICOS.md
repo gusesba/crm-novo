@@ -4,6 +4,8 @@ Levantamento do código em **05/10/2026**. Este documento descreve a implementa�
 
 Consolidação de conversas individuais LID/telefone e recuperação dos botões de lead revisadas em **13/11/2026** (7.3, 12.1 e 15.1).
 
+Fluxo de resolução de números em “Nova conversa” revisado em **13/11/2026** (12.4).
+
 Fluxo de arquivamento/desarquivamento de conversas revisado em **23/10/2026** (12.5).
 
 Fluxos de filtro por período e exportação de leads/vendas para Excel revisados em **23/10/2026** (6.1 e 6.9).
@@ -744,7 +746,7 @@ Imagem/Avatar → `GET /api/whatsapp/profile-picture?chatId={jid}[&userId=...]` 
 
 ### 12.4 Nova conversa manual e por deep link
 
-- “Nova conversa” → prompt do navegador → remove não dígitos, exige 12–15 dígitos com DDI/DDD → seleciona objeto Chat provisório, sem requisição de resolução. Cancelar não faz nada; número inválido mostra erro. Chat só é persistido após mensagem/sincronização.
+- “Nova conversa” → prompt do navegador → remove não dígitos, exige 12–15 dígitos com DDI/DDD → chama `POST /api/whatsapp/resolve-phone` na conta selecionada, usando o mesmo fluxo dos contatos recebidos/texto (14.5). Consulta o WhatsApp e tenta as variantes brasileiras com/sem DDI e nono dígito; usa o JID retornado, reutilizando o Chat da lista quando existente. Se o número retornado difere do informado, pede confirmação antes de abrir. Número e variantes ausentes ou falha da consulta mostram erro e preservam a seleção anterior, sem criar conversa/contato. Cancelar o prompt ou a confirmação não abre conversa nem grava dados; número inválido mostra erro sem consultar. Chat provisório só é persistido após mensagem/sincronização; esta ação não salva contato na agenda nem envia mensagem.
 - `/whatsapp?phone=...` aceita 10–15 dígitos e seleciona Chat provisório; contrato de envio é mais restrito, 12–15. Não envia automaticamente nem verifica conexão nessa seleção.
 - Resolver número de contato recebido/texto é outro caminho, detalhado na seção 14.5.
 
