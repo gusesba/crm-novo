@@ -32,13 +32,15 @@ function seed(session: string, number = a) {
   bindSessionNumber(session, `${number}@s.whatsapp.net`);
   saveMessage(session, message);
 }
-const sessionTables = ["messages", "chats", "contacts", "contact_names", "chat_states", "message_reactions", "profile_pictures", "media_cache", "pending_message_edits", "service_state", "auth"];
+const sessionTables = ["messages", "chats", "chat_aliases", "contacts", "contact_names", "chat_states", "message_reactions", "profile_pictures", "media_cache", "pending_message_edits", "service_state", "auth"];
 
 test("limpeza HTTP elimina todas as sessões do número/dono, caches e backup sem afetar outros números, donos ou resultados", async () => {
   const extra = "40_" + "a".repeat(32);
   const other = "40_" + "b".repeat(32);
   for (const session of ["40", extra, "41"]) seed(session);
   seed(other, b);
+  for (const session of ["40", extra, other, "41"])
+    db.prepare("INSERT INTO chat_aliases VALUES(?,?,?)").run(session, "123456789@lid", chat);
   for (const [owner, number] of [["40", a], ["40", b], ["41", a]])
     db.prepare("INSERT INTO backup_chat_aliases VALUES(?,?,?,?)").run(owner, number, "123456789@lid", chat);
   db.prepare("INSERT INTO contacts VALUES(?,?,?,?)").run(extra, chat, "Contato", 4);

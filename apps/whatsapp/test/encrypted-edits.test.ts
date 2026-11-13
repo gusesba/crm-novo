@@ -13,6 +13,7 @@ const { db } = await import("../src/storage/database.js");
 const { saveMessage, listMessages, rawMessage, deleteStoredMessage } = await import("../src/storage/messages.js");
 const { reconcileEncryptedEdits } = await import("../src/storage/encrypted-edits.js");
 const { editMessage } = await import("../src/messaging/send.js");
+const { listChats } = await import("../src/storage/chat-states.js");
 after(() => { db.close(); rmSync(directory, { recursive: true }); });
 const chat = "5551999999999@s.whatsapp.net";
 const me = "5551888888888@s.whatsapp.net";
@@ -57,6 +58,61 @@ test("edição antes da original ou sem segredo fica pendente sem criar balão e
   assert.equal(db.prepare("SELECT COUNT(*) AS count FROM pending_message_edits WHERE user_id='pending'").get()?.count, 1);
   saveMessage("pending", original());
   assert.equal(listMessages("pending", chat)[0].text, "Depois");
+});
+
+test("polling reaplica edição pendente quando o mapeamento chega depois da original por LID", () => {
+  const user = "late-identity";
+  const lid = "123456789@lid";
+  saveMessage(user, original(true, false, lid));
+  saveMessage(user, event());
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM pending_message_edits WHERE user_id=?").get(user)?.count, 1);
+  db.prepare("INSERT INTO auth VALUES(?,?,?)").run(user, "lid-mapping-123456789_reverse", JSON.stringify(chat.split("@")[0]));
+  assert.equal(listChats(user)[0].lastText, "Depois");
+  const rows = listMessages(user, chat);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].text, "Depois");
+  assert.equal(rows[0].timestamp, 100000);
+  assert.equal(rawMessage(user, "original")?.key.remoteJid, lid);
+  assert.deepEqual(rawMessage(user, "original")?.message?.messageContextInfo?.messageSecret, secret);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM pending_message_edits WHERE user_id=?").get(user)?.count, 0);
+});
+
+test("edição por telefone consolida a original por LID antes de tentar aplicá-la", () => {
+  const user = "edit-before-poll";
+  const lid = "223456789@lid";
+  saveMessage(user, original(true, false, lid));
+  db.prepare("INSERT INTO auth VALUES(?,?,?)").run(user, "lid-mapping-223456789_reverse", JSON.stringify(chat.split("@")[0]));
+  saveMessage(user, event());
+  assert.equal(db.prepare("SELECT text FROM messages WHERE user_id=? AND id='original'").get(user)?.text, "Depois");
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM pending_message_edits WHERE user_id=?").get(user)?.count, 0);
+});
+
+test("edições PN/LID usam a identidade persistida após remoção das chaves de autenticação", () => {
+  const user = "edit-after-disconnect";
+  const lid = "323456789@lid";
+  saveMessage(user, original(true, false, lid));
+  db.prepare("INSERT INTO auth VALUES(?,?,?)").run(user, "lid-mapping-323456789_reverse", JSON.stringify(chat.split("@")[0]));
+  listMessages(user, chat);
+  db.prepare("DELETE FROM auth WHERE user_id=?").run(user);
+  saveMessage(user, event({ author: lid }));
+  assert.equal(listMessages(user, chat)[0].text, "Depois");
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM pending_message_edits WHERE user_id=?").get(user)?.count, 0);
+});
+
+test("falha ao reaplicar edição reverte a consolidação e permite tentar novamente", () => {
+  const user = "edit-consolidation-failure";
+  const lid = "423456789@lid";
+  saveMessage(user, original(true, false, lid));
+  saveMessage(user, event());
+  db.prepare("INSERT INTO auth VALUES(?,?,?)").run(user, "lid-mapping-423456789_reverse", JSON.stringify(chat.split("@")[0]));
+  db.exec("CREATE TEMP TRIGGER fail_identity_edit BEFORE UPDATE ON messages WHEN NEW.user_id='edit-consolidation-failure' AND NEW.text='Depois' BEGIN SELECT RAISE(ABORT,'edit failure'); END");
+  try {
+    assert.throws(() => listChats(user), /edit failure/);
+    assert.equal(db.prepare("SELECT chat_id FROM messages WHERE user_id=? AND id='original'").get(user)?.chat_id, lid);
+    assert.equal(db.prepare("SELECT COUNT(*) AS count FROM pending_message_edits WHERE user_id=?").get(user)?.count, 1);
+  } finally { db.exec("DROP TRIGGER fail_identity_edit"); }
+  assert.equal(listMessages(user, chat)[0].text, "Depois");
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM pending_message_edits WHERE user_id=?").get(user)?.count, 0);
 });
 
 test("recibos repetidos ou fora de ordem não restauram uma revisão antiga", () => {

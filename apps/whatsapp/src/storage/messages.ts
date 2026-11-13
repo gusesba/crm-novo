@@ -5,7 +5,7 @@ import {
   type WAMessage,
 } from "@whiskeysockets/baileys";
 import { db } from "./database.js";
-import { canonicalChatId, normalizeChats } from "./chat-identity.js";
+import { canonicalChatId, normalizeChats, saveChatIdentity } from "./chat-identity.js";
 import { conversationName, savePushName } from "./contacts.js";
 import { messageReply } from "./message-replies.js";
 import { messageMetadata, preserveMessageSecret, type StoredMessage } from "./message-metadata.js";
@@ -129,6 +129,10 @@ export function saveMessage(user: string, msg: WAMessage, sourceNumber?: string)
   replayEncryptedEdits(user, jid, msg.key.id!, saveMessage);
 }
 export function messageChatId(message: WAMessage, user: string) {
+  if (message.key.remoteJid?.endsWith("@lid") && message.key.remoteJidAlt?.endsWith("@s.whatsapp.net"))
+    saveChatIdentity(user, message.key.remoteJid, message.key.remoteJidAlt);
+  else if (message.key.remoteJid?.endsWith("@s.whatsapp.net") && message.key.remoteJidAlt?.endsWith("@lid"))
+    saveChatIdentity(user, message.key.remoteJidAlt, message.key.remoteJid);
   const id = message.key.remoteJid?.endsWith("@lid") &&
     message.key.remoteJidAlt?.endsWith("@s.whatsapp.net")
     ? message.key.remoteJidAlt
@@ -185,7 +189,7 @@ export function listMessages(
   before = Date.now() + 1000,
   beforeId = "",
 ) {
-  normalizeChats(user);
+  normalizeChats(user, saveMessage);
   chatId = canonicalChatId(user, chatId);
   const messages = db
     .prepare(
@@ -343,7 +347,7 @@ export function saveMessageReaction(
 }
 
 export function markMessageDeleted(user: string, id: string, chatId: string) {
-  normalizeChats(user);
+  normalizeChats(user, saveMessage);
   chatId = canonicalChatId(user, chatId);
   const original = rawMessage(user, id);
   if (!original || messageChatId(original, user) !== chatId) return false;
@@ -373,7 +377,7 @@ export function markMessageDeleted(user: string, id: string, chatId: string) {
 }
 
 export function deleteStoredMessage(user: string, id: string, chatId: string) {
-  normalizeChats(user);
+  normalizeChats(user, saveMessage);
   chatId = canonicalChatId(user, chatId);
   const stored = db
     .prepare("SELECT 1 FROM messages WHERE user_id=? AND id=? AND chat_id=?")

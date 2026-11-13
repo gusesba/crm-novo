@@ -2,6 +2,7 @@ import { createDecipheriv, createHmac } from "node:crypto";
 import { BufferJSON, jidNormalizedUser, normalizeMessageContent, proto, type WAMessage } from "@whiskeysockets/baileys";
 import { db } from "./database.js";
 import { messageMetadata, preserveMessageSecret, type StoredMessage } from "./message-metadata.js";
+import { canonicalChatId, normalizeChats } from "./chat-identity.js";
 
 type Save = (user: string, message: WAMessage) => void;
 const applying = new Set<string>();
@@ -15,6 +16,10 @@ export function encryptedEdit(message: WAMessage) {
 function identities(user: string, values: (string | null | undefined)[]) {
   const result = new Set(values.filter((id): id is string => !!id && /@(s\.whatsapp\.net|lid)$/.test(id)).map(jidNormalizedUser));
   for (const id of [...result]) {
+    result.add(canonicalChatId(user, id));
+    const aliases = db.prepare("SELECT lid,chat_id FROM chat_aliases WHERE user_id=? AND (lid=? OR chat_id=?)")
+      .all(user, id, id) as { lid: string; chat_id: string }[];
+    for (const alias of aliases) { result.add(alias.lid); result.add(alias.chat_id); }
     const lid = id.endsWith("@lid");
     const value = db.prepare("SELECT value FROM auth WHERE user_id=? AND key=?").get(user,
       `lid-mapping-${id.split("@")[0]}${lid ? "_reverse" : ""}`) as { value: string } | undefined;
@@ -84,6 +89,8 @@ export function replayEncryptedEdits(user: string, chatId: string, target: strin
 export function queueEncryptedEdit(user: string, chatId: string, message: WAMessage, save: Save) {
   const envelope = encryptedEdit(message);
   if (!envelope) return false;
+  normalizeChats(user, save);
+  chatId = canonicalChatId(user, chatId);
   if (message.key.id && envelope.targetMessageKey?.id)
     db.prepare("INSERT OR IGNORE INTO pending_message_edits VALUES(?,?,?,?,?,?)").run(user, message.key.id, chatId,
       envelope.targetMessageKey.id, Number(message.messageTimestamp || 0) * 1000, JSON.stringify(message, BufferJSON.replacer));

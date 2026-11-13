@@ -1,6 +1,15 @@
 import { db } from "./database.js";
 import { consolidateBackupChat, sessionNumber } from "./backups.js";
 import { sessionOwner } from "../sessions/session-id.js";
+import type { WAMessage } from "@whiskeysockets/baileys";
+import { replayEncryptedEdits } from "./encrypted-edits.js";
+
+export function saveChatIdentity(user: string, id: string, chatId: string) {
+  if (!/^\d+(?::\d+)?@lid$/.test(id) || !/^\d{10,15}@s\.whatsapp\.net$/.test(chatId)) return;
+  const lid = id.split("@")[0].split(":")[0] + "@lid";
+  db.prepare(`INSERT INTO chat_aliases VALUES(?,?,?) ON CONFLICT(user_id,lid) DO UPDATE SET chat_id=excluded.chat_id
+    WHERE chat_aliases.chat_id!=excluded.chat_id`).run(user, lid, chatId);
+}
 
 export function canonicalChatId(user: string, id: string) {
   if (!id.endsWith("@lid")) return id;
@@ -8,19 +17,30 @@ export function canonicalChatId(user: string, id: string) {
   const mapping = db.prepare("SELECT value FROM auth WHERE user_id=? AND key=?")
     .get(user, `lid-mapping-${lid}_reverse`) as { value: string } | undefined;
   if (mapping) {
+    let phone: unknown;
     try {
-      const phone = JSON.parse(mapping.value);
-      if (typeof phone === "string" && /^\d{10,15}$/.test(phone)) return `${phone}@s.whatsapp.net`;
+      phone = JSON.parse(mapping.value);
     } catch { /* Uma chave inválida não comprova a identidade. */ }
+    if (typeof phone === "string" && /^\d{10,15}$/.test(phone)) {
+      const chatId = `${phone}@s.whatsapp.net`;
+      saveChatIdentity(user, id, chatId);
+      return chatId;
+    }
   }
-  const message = db.prepare(`SELECT json_extract(raw,'$.key.remoteJidAlt') AS phone FROM messages
+  const alias = db.prepare("SELECT chat_id FROM chat_aliases WHERE user_id=? AND lid=?")
+    .get(user, `${lid}@lid`) as { chat_id: string } | undefined;
+  if (alias) return alias.chat_id;
+  const message = db.prepare(`SELECT chat_id,json_extract(raw,'$.key.remoteJidAlt') AS phone FROM messages
     WHERE user_id=? AND json_extract(raw,'$.key.remoteJid')=?
-      AND json_extract(raw,'$.key.remoteJidAlt') LIKE '%@s.whatsapp.net' LIMIT 1`)
-    .get(user, id) as { phone: string } | undefined;
-  return message && /^\d{10,15}@s\.whatsapp\.net$/.test(message.phone) ? message.phone : id;
+      AND (json_extract(raw,'$.key.remoteJidAlt') LIKE '%@s.whatsapp.net' OR chat_id LIKE '%@s.whatsapp.net') LIMIT 1`)
+    .get(user, id) as { phone: string; chat_id: string } | undefined;
+  const chatId = message && [message.phone, message.chat_id].find((value) => /^\d{10,15}@s\.whatsapp\.net$/.test(value));
+  if (!chatId) return id;
+  saveChatIdentity(user, id, chatId);
+  return chatId;
 }
 
-export function normalizeChats(user: string) {
+export function normalizeChats(user: string, save: (user: string, message: WAMessage) => void) {
   const number = sessionNumber(user);
   const owner = number ? sessionOwner(user) : null;
   const chats = db.prepare(`SELECT id FROM chats WHERE user_id=? AND id LIKE '%@lid'
@@ -47,6 +67,10 @@ export function normalizeChats(user: string) {
       if (number) consolidateBackupChat(user, number, chat.id, id);
       db.prepare("DELETE FROM chats WHERE user_id=? AND id=?").run(user, chat.id);
     }
+    const pending = db.prepare(`SELECT DISTINCT p.chat_id,p.target_id FROM pending_message_edits p
+      JOIN messages m ON m.user_id=p.user_id AND m.chat_id=p.chat_id AND m.id=p.target_id
+      WHERE p.user_id=? AND m.kind!='deleted'`).all(user) as { chat_id: string; target_id: string }[];
+    for (const edit of pending) replayEncryptedEdits(user, edit.chat_id, edit.target_id, save);
     db.exec("RELEASE normalize_chats");
   } catch (error) {
     db.exec("ROLLBACK TO normalize_chats; RELEASE normalize_chats");

@@ -8,6 +8,7 @@ import { proto } from "@whiskeysockets/baileys";
 import { db } from "./database.js";
 import { canonicalChatId, normalizeChats } from "./chat-identity.js";
 import { sessionNumber } from "./backups.js";
+import { saveMessage } from "./messages.js";
 
 let lastUnreadUpdate = 0;
 function unreadUpdateTime() {
@@ -112,7 +113,7 @@ export function syncMessageRead(user: string, key: WAMessageKey) {
 }
 
 export function listChats(user: string) {
-  normalizeChats(user);
+  normalizeChats(user, saveMessage);
   normalizeChatStates(user);
   return db
     .prepare(

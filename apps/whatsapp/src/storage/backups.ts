@@ -167,7 +167,7 @@ export function bindSessionNumber(session: string, jid: string, migrateExisting 
         snapshot(session, number);
       }
       // Só limpa o atendimento antigo depois de arquivar seus textos na mesma transação.
-      for (const table of ["messages", "chats", "contacts", "contact_names", "chat_states", "message_reactions", "profile_pictures", "media_cache", "pending_message_edits", "service_state"])
+      for (const table of ["messages", "chats", "chat_aliases", "contacts", "contact_names", "chat_states", "message_reactions", "profile_pictures", "media_cache", "pending_message_edits", "service_state"])
         db.prepare(`DELETE FROM ${table} WHERE user_id=?`).run(session);
     }
     db.prepare("INSERT OR REPLACE INTO session_numbers VALUES(?,?)").run(session, phone);
@@ -226,7 +226,7 @@ export function clearNumberData(owner: string, number: string) {
   db.exec("BEGIN IMMEDIATE");
   try {
     for (const session of sessions) {
-      for (const table of ["messages", "chats", "contacts", "contact_names", "chat_states", "message_reactions", "profile_pictures", "media_cache", "pending_message_edits", "service_state", "auth"])
+      for (const table of ["messages", "chats", "chat_aliases", "contacts", "contact_names", "chat_states", "message_reactions", "profile_pictures", "media_cache", "pending_message_edits", "service_state", "auth"])
         db.prepare(`DELETE FROM ${table} WHERE user_id=?`).run(session);
       db.prepare("DELETE FROM session_numbers WHERE session_id=?").run(session);
     }

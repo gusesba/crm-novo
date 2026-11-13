@@ -13,6 +13,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS contact_names (user_id TEXT, id TEXT, first_name TEXT, last_name TEXT, full_name TEXT, PRIMARY KEY(user_id,id));
   CREATE TABLE IF NOT EXISTS service_state (user_id TEXT, key TEXT, value TEXT, PRIMARY KEY(user_id,key));
   CREATE TABLE IF NOT EXISTS chats (user_id TEXT, id TEXT, name TEXT, last_text TEXT, updated_at INTEGER, PRIMARY KEY(user_id,id));
+  CREATE TABLE IF NOT EXISTS chat_aliases (user_id TEXT, lid TEXT, chat_id TEXT NOT NULL, PRIMARY KEY(user_id,lid));
   CREATE TABLE IF NOT EXISTS chat_states (user_id TEXT, id TEXT, archived INTEGER NOT NULL DEFAULT 0, pinned_at INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(user_id,id));
   CREATE TABLE IF NOT EXISTS messages (user_id TEXT, id TEXT, chat_id TEXT, text TEXT, mine INTEGER, kind TEXT, timestamp INTEGER, raw TEXT, PRIMARY KEY(user_id,id));
   CREATE TABLE IF NOT EXISTS session_numbers (session_id TEXT PRIMARY KEY, phone TEXT NOT NULL);

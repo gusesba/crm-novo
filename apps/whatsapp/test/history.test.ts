@@ -25,6 +25,10 @@ const { saveProfilePicture, storedProfilePicture } =
   await import("../src/storage/profile-pictures.js");
 const { contactName, saveContact, saveConversationName, savePushName } =
   await import("../src/storage/contacts.js");
+const { bindSessionNumber } = await import("../src/storage/backups.js");
+const { disconnect } = await import("../src/sessions/manager.js");
+const { editMessage } = await import("../src/messaging/send.js");
+const { canonicalChatId } = await import("../src/storage/chat-identity.js");
 after(() => {
   db.close();
   rmSync(directory, { recursive: true });
@@ -71,6 +75,70 @@ test("revogação e exclusão remotas usam a conta para resolver o LID original 
   assert.equal(deleteStoredMessage(user, "removed", removedChat), true);
   assert.deepEqual(listMessages(user, chat).map((row) => [row.id, row.kind]), [["revoked", "deleted"]]);
   assert.equal(listMessages(other, lid).length, 2);
+});
+
+test("identidade do atendimento sobrevive à desconexão e à remoção de todas as mensagens", async () => {
+  const user = "101";
+  const lid = "723456789@lid";
+  const number = "5551999990001@s.whatsapp.net";
+  bindSessionNumber(user, number);
+  saveMessage(user, { ...message("original"), key: { id: "original", remoteJid: lid, fromMe: true } });
+  db.prepare("INSERT INTO auth VALUES(?,?,?)").run(user, "lid-mapping-723456789_reverse", JSON.stringify(chat.split("@")[0]));
+  listChats(user);
+  await disconnect(user);
+  bindSessionNumber(user, number);
+  let calls = 0;
+  await editMessage(user, "original", chat, "Editada", () => ({ sendMessage: async () => { calls++; return undefined; } }));
+  assert.equal(calls, 1);
+  assert.equal(listMessages(user, chat)[0].text, "Editada");
+  assert.equal(markMessageDeleted(user, "original", messageChatId(rawMessage(user, "original")!, user)!), true);
+  assert.equal(listMessages(user, chat)[0].kind, "deleted");
+  assert.equal(deleteStoredMessage(user, "original", chat), true);
+  saveMessage(user, { ...message("new"), key: { id: "new", remoteJid: lid } });
+  assert.deepEqual(listChats(user).map((row) => row.id), [chat]);
+  assert.equal(listMessages(user, chat)[0].id, "new");
+});
+
+test("excluir a única mensagem com número alternativo mantém a identidade das mensagens restantes", () => {
+  const user = "102";
+  const lid = "823456789@lid";
+  bindSessionNumber(user, "5551999990002@s.whatsapp.net");
+  saveMessage(user, { ...message("old"), key: { id: "old", remoteJid: lid } });
+  saveMessage(user, { ...message("proof"), key: { id: "proof", remoteJid: lid, remoteJidAlt: chat } });
+  listChats(user);
+  assert.equal(deleteStoredMessage(user, "proof", chat), true);
+  assert.equal(messageChatId(rawMessage(user, "old")!, user), chat);
+  assert.equal(markMessageDeleted(user, "old", chat), true);
+  assert.equal(listMessages(user, chat)[0].kind, "deleted");
+});
+
+test("telefone como chave principal também preserva o LID alternativo após excluir a referência", () => {
+  const user = "104";
+  const lid = "1023456789@lid";
+  bindSessionNumber(user, "5551999990005@s.whatsapp.net");
+  saveMessage(user, { ...message("proof"), key: { id: "proof", remoteJid: chat, remoteJidAlt: lid } });
+  assert.equal(deleteStoredMessage(user, "proof", chat), true);
+  saveMessage(user, { ...message("new"), key: { id: "new", remoteJid: lid } });
+  assert.equal(canonicalChatId(user, lid), chat);
+  assert.deepEqual(listChats(user).map((row) => row.id), [chat]);
+});
+
+test("histórico já consolidado recupera identidade sem autenticação e não a transfere para outra sessão ou número", async () => {
+  const user = "103";
+  const other = user + "_" + "a".repeat(32);
+  const lid = "923456789@lid";
+  for (const session of [user, other]) {
+    bindSessionNumber(session, "5551999990003@s.whatsapp.net");
+    saveMessage(session, { ...message("old"), key: { id: "old", remoteJid: lid } });
+  }
+  // Simula uma consolidação anterior à persistência da identidade, sem remoteJidAlt.
+  db.prepare("UPDATE messages SET chat_id=? WHERE user_id=?").run(chat, user);
+  db.prepare("UPDATE chats SET id=? WHERE user_id=?").run(chat, user);
+  assert.equal(canonicalChatId(user, lid), chat);
+  assert.equal(canonicalChatId(other, lid), lid);
+  await disconnect(user);
+  bindSessionNumber(user, "5551999990004@s.whatsapp.net");
+  assert.equal(canonicalChatId(user, lid), lid);
 });
 
 test("consolida LID e telefone já persistidos sem perder histórico ou estado", () => {
