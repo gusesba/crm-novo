@@ -129,8 +129,7 @@ async function sendSingleMessage(user: string, input: SendInput, socket: Pick<WA
   if (
     input.replyTo &&
     (!quoted ||
-      (quoted.key.remoteJid !== input.chatId &&
-        quoted.key.remoteJidAlt !== input.chatId))
+      messageChatId(quoted, user) !== input.chatId)
   )
     throw Object.assign(new Error("Mensagem de resposta inválida."), {
       statusCode: 400,
@@ -164,7 +163,7 @@ export async function editMessage(
 ) {
   const previous = rawMessage(user, id);
   const sourceNumber = sessionNumber(user);
-  if (!previous?.key.fromMe || messageChatId(previous) !== chatId)
+  if (!previous?.key.fromMe || messageChatId(previous, user) !== chatId)
     throw Object.assign(
       new Error("Só é possível editar suas mensagens nesta conversa."),
       { statusCode: 403 },
@@ -251,7 +250,7 @@ export async function deleteMessage(
 }
 function conversationMessage(user: string, id: string, chatId: string) {
   const message = rawMessage(user, id);
-  if (!message || messageChatId(message) !== chatId)
+  if (!message || messageChatId(message, user) !== chatId)
     throw Object.assign(new Error("Mensagem não encontrada nesta conversa."), {
       statusCode: 404,
     });

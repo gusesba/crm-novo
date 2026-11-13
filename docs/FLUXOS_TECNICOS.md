@@ -2,6 +2,8 @@
 
 Levantamento do código em **05/10/2026**. Este documento descreve a implementação encontrada no frontend Next.js, na API .NET e no serviço WhatsApp Node/Fastify/Baileys. O inventário foi construído a partir das rotas, componentes, handlers, serviços, persistência e testes; `FUNCIONALIDADES.md` não foi usado como fonte do inventário.
 
+Consolidação de conversas individuais LID/telefone e recuperação dos botões de lead revisadas em **13/11/2026** (7.3, 12.1 e 15.1).
+
 Fluxo de arquivamento/desarquivamento de conversas revisado em **23/10/2026** (12.5).
 
 Fluxos de filtro por período e exportação de leads/vendas para Excel revisados em **23/10/2026** (6.1 e 6.9).
@@ -469,7 +471,7 @@ Fontes: [lead-conversation-button.tsx](../apps/web/src/features/leads/lead-conve
 
 ### 7.3 Criar ou editar lead a partir da conversa
 
-1. Chat individual sem lead da carteira com telefone exato → “Criar lead” abre LeadForm pré-preenchido com nome/número do chat → criação da seção 6.3.
+1. Os botões de lead exigem JID individual de telefone. LIDs com correspondência comprovada passam a ser listados pelo telefone conforme 12.1, recuperando essa consulta e os botões; LIDs ainda não resolvidos e grupos continuam sem esses controles. Não cria nem vincula lead automaticamente ao consolidar a conversa. Chat individual sem lead da carteira com telefone exato → “Criar lead” abre LeadForm pré-preenchido com nome/número do chat → criação da seção 6.3.
 2. Se lead já existe na carteira → “Abrir lead” permite consulta/edição normal.
 3. Após salvar, se vendedor atual é o usuário e lead não tem chat, o callback tenta `/leads/{id}/link`.
 4. Link bem-sucedido → reload leadMatch. Se falhar, cadastro/edição já concluídos permanecem; erro aparece na página. São duas operações, não uma transação conjunta.
@@ -477,7 +479,7 @@ Fontes: [lead-conversation-button.tsx](../apps/web/src/features/leads/lead-conve
 
 ### 7.4 Salvar/editar contato na agenda do WhatsApp
 
-Fontes: [chat-page.tsx](../apps/web/src/features/whatsapp/chat-page.tsx), [contact-form.tsx](../apps/web/src/features/whatsapp/contact-form.tsx), [WhatsAppController.cs](../apps/api/Features/WhatsApp/WhatsAppController.cs), [routes.ts](../apps/whatsapp/src/routes.ts), [contacts.ts da integração](../apps/whatsapp/src/messaging/contacts.ts), [contacts.ts do storage](../apps/whatsapp/src/storage/contacts.ts) e [chat-states.ts](../apps/whatsapp/src/storage/chat-states.ts).
+Fontes: [chat-page.tsx](../apps/web/src/features/whatsapp/chat-page.tsx), [contact-form.tsx](../apps/web/src/features/whatsapp/contact-form.tsx), [WhatsAppController.cs](../apps/api/Features/WhatsApp/WhatsAppController.cs), [routes.ts](../apps/whatsapp/src/routes.ts), [contacts.ts da integração](../apps/whatsapp/src/messaging/contacts.ts), [contacts.ts do storage](../apps/whatsapp/src/storage/contacts.ts) e [chat-states.ts](../apps/whatsapp/src/storage/chat-states.ts), [chat-identity.ts](../apps/whatsapp/src/storage/chat-identity.ts).
 
 1. No atendimento, selecionar conversa individual com identificador de 10–15 dígitos (`@s.whatsapp.net`), inclusive aberta pelo lead, mostra “Salvar contato” ou “Editar contato”, conforme `contactSaved` da consulta de chats. Vale também para uma conversa provisória aberta em “Nova conversa”, sem exigir mensagem anterior ou lead. Não aparece para grupos/LID sem telefone nem no Backup, inclusive no histórico administrativo de terceiros.
 2. Abrir faz `GET /api/whatsapp/contacts?chatId=...` → `/sessions/{ID autenticado}/contacts?chatId=...`. Retorna `{chatId,firstName,lastName,fullName,saved}` do armazenamento local da própria sessão; leitura não chama o WhatsApp nem exige conexão. `saved` indica evidência de nome de agenda no cache. Sem cadastro conhecido, retorna nomes vazios ou sugestão do nome de perfil já conhecido, com saved=false. Contatos antigos/sincronizados que só têm nome completo sugerem a primeira palavra como Nome e o restante como Sobrenome; não há inferência perfeita de nomes compostos antigos. Para contatos gravados pelo formulário, os dois campos são preservados exatamente como informados (após trim), inclusive Nome composto. Se o nome completo recebido depois pelo celular divergir do snapshot local, a consulta usa o nome novo com a mesma separação de sugestão.
@@ -704,7 +706,7 @@ Fontes: [chat-page.tsx](../apps/web/src/features/whatsapp/chat-page.tsx), [chat-
 ### 12.1 Listar, buscar e combinar visualizações por WhatsApp, status e classificação
 
 1. ChatPage → `GET /api/whatsapp/chats[?accountId=...]` a cada cinco segundos na aba ativa → serviço consulta SQLite pela chave completa da conta. Selecionar outra conta reinicia a lista/histórico conforme 11.0.
-2. Normaliza chat states @lid para telefone quando há mapeamento nas chaves. Lista até quinhentas conversas não arquivadas e todas as arquivadas; prioriza fixadas/data. Chats só com estado, sem registro em chats, não são produzidos por essa consulta.
+2. Antes de listar, consolida chats e mensagens `@lid` no JID de telefone quando existe correspondência comprovada na mesma conta: chave `lid-mapping-{lid}_reverse` ou `remoteJidAlt` de telefone em mensagem persistida daquele LID. A operação usa savepoint; falha desfaz a consolidação e propaga erro, sem apagar o histórico. Preserva a prévia mais recente e o nome de contato de maior prioridade; depois normaliza estados, preservando arquivamento/fixação e o estado de não lidas mais recente. A consolidação ocorre antes do limite e também na leitura do histórico, incluindo registros antigos; o raw original das mensagens é preservado. Sem prova, mantém o LID separado, sem inferir telefone pelo nome ou pelos dígitos do ID. Não une variantes com/sem nono dígito. O backup textual já arquivado não é reescrito por essa consolidação do atendimento. Lista até quinhentas conversas não arquivadas e todas as arquivadas; prioriza fixadas/data. Chats só com estado, sem registro em chats, não são produzidos por essa consulta.
 3. API aplica nome/status do lead vinculado no escopo/sessão sobre o nome recebido; fallback é nome válido do WhatsApp ou número. Retorna `[{id,name,lastText,updatedAt,archived,pinnedAt,unreadCount,markedUnread,leadId,leadStatus,classifications:[{id,name,color}]}]`. `unreadCount` é inteiro não negativo e `markedUnread` distingue a marcação manual sem quantidade; payload antigo/inválido usa zero/false. Sem vínculo explícito no escopo: leadId=null/leadStatus=null/classifications=[], mesmo que o telefone coincida com um lead. Consulta os vínculos/classificações em lote, somente do usuário autenticado. leadStatus é o status atual do lead em cada consulta.
 4. Busca por nome/ID acontece localmente, antes do agrupamento, sem parâmetro para API. Ao alterar uma busca não vazia, abre os grupos que contêm resultados, inclusive arquivadas; permite recolhê-los novamente. Front prioriza fixadas, depois data e ID. Arquivadas (inclusive quando fixadas) permanecem no grupo Arquivadas. Somente WhatsApp ativo mantém subtítulo Fixadas dentro de Conversas.
 5. Estados são recebidos do WhatsApp; o CRM também permite arquivar/desarquivar a conversa selecionada (12.5). Fixar/desafixar permanece disponível apenas fora do CRM.
@@ -914,7 +916,7 @@ Fontes: [attachment.tsx](../apps/web/src/features/whatsapp/attachment.tsx), [com
 
 ## 15. Recebimento e sincronização automática do WhatsApp
 
-Fontes: [manager.ts](../apps/whatsapp/src/sessions/manager.ts), [read-sync.ts](../apps/whatsapp/src/sessions/read-sync.ts), [messages.ts](../apps/whatsapp/src/storage/messages.ts), [contacts.ts](../apps/whatsapp/src/storage/contacts.ts), [chat-states.ts](../apps/whatsapp/src/storage/chat-states.ts).
+Fontes: [manager.ts](../apps/whatsapp/src/sessions/manager.ts), [read-sync.ts](../apps/whatsapp/src/sessions/read-sync.ts), [messages.ts](../apps/whatsapp/src/storage/messages.ts), [contacts.ts](../apps/whatsapp/src/storage/contacts.ts), [chat-states.ts](../apps/whatsapp/src/storage/chat-states.ts), [chat-identity.ts](../apps/whatsapp/src/storage/chat-identity.ts).
 
 Esses fluxos são originados por eventos Baileys, sem clique e sem POST do navegador. Cada socket captura sua chave de conta completa, inclusive para contas do mesmo usuário; contas fora da aba visível continuam sincronizando. IDs iguais de chat/mensagem em contas diferentes não mesclam dados.
 
@@ -933,7 +935,7 @@ Esses fluxos são originados por eventos Baileys, sem clique e sem POST do naveg
 
 ### 15.1 Caminhos dentro de saveMessage
 
-1. Resolve o chat pelo `remoteJid` original; somente para conversas individuais `@lid` usa `remoteJidAlt` com `@s.whatsapp.net`. Status (`remoteJid='status@broadcast'`) são descartados mesmo com número alternativo do autor, antes de salvar mensagem, reação, nome de perfil ou prévia. Grupos mantêm o JID de grupo. Descarta também mensagens sem chat/id/conteúdo. Respostas a Status cujo chat original é uma conversa individual continuam sendo mensagens reais, mesmo com referência ao Status no contexto citado. Eventos ao vivo e sincronização de histórico usam a mesma regra, sem alteração de endpoints/payloads na API/frontend.
+1. Resolve o chat pelo `remoteJid` original; somente para conversas individuais `@lid` usa `remoteJidAlt` com `@s.whatsapp.net`. Na ausência do alternativo, também resolve LID por identidade comprovada da mesma conta conforme 12.1, evitando recriar o chat duplicado. Resposta, edição e exclusão validam a mesma identidade canônica, preservando as chaves originais exigidas pelo protocolo. Status (`remoteJid='status@broadcast'`) são descartados mesmo com número alternativo do autor, antes de salvar mensagem, reação, nome de perfil ou prévia. Grupos mantêm o JID de grupo. Descarta também mensagens sem chat/id/conteúdo. Respostas a Status cujo chat original é uma conversa individual continuam sendo mensagens reais, mesmo com referência ao Status no contexto citado. Eventos ao vivo e sincronização de histórico usam a mesma regra, sem alteração de endpoints/payloads na API/frontend.
 2. Normaliza envelopes Baileys. ReactionMessage atualiza reação e termina; protocolMessage.editedMessage atualiza original do mesmo chat e registra a marca de edição; updates nativos com editedMessage também são reconhecidos. REVOKE marca deleted; outros protocolos/distribuição de chave não geram balões.
 3. Classifica conteúdo, extrai texto/caption/nome de documento/card; tipo não suportado pode cair em “Mensagem não suportada”. Timestamp fica em milissegundos.
 4. Incoming individual salva pushName; incoming de grupo salva nome do remetente sem substituir título do grupo.

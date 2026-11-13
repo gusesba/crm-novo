@@ -36,6 +36,58 @@ const message = (id: string, text = id): WAMessage => ({
   pushName: "Cliente",
 });
 
+test("consolida LID e telefone já persistidos sem perder histórico ou estado", () => {
+  const user = "duplicate-lid";
+  const lid = "123456789@lid";
+  saveMessage(user, { ...message("old-lid"), key: { id: "old-lid", remoteJid: lid }, messageTimestamp: 90 });
+  saveChatState(user, { id: lid, archived: true, pinned: 80, unreadCount: 3 });
+  saveMessage(user, message("phone-message"));
+  saveContact(user, { id: chat, name: "Contato salvo" });
+  db.prepare("INSERT INTO auth VALUES(?,?,?)").run(user, "lid-mapping-123456789_reverse", JSON.stringify(chat.split("@")[0]));
+  const rows = listChats(user) as { id: string; name: string; lastText: string; archived: number; pinnedAt: number; unreadCount: number }[];
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].id, chat);
+  assert.equal(rows[0].name, "Contato salvo");
+  assert.equal(rows[0].lastText, "phone-message");
+  assert.equal(rows[0].archived, 1);
+  assert.equal(rows[0].pinnedAt, 80);
+  assert.equal(rows[0].unreadCount, 3);
+  assert.deepEqual(listMessages(user, chat).map((m) => m.id), ["old-lid", "phone-message"]);
+  assert.equal(rawMessage(user, "old-lid")?.key.remoteJid, lid);
+  saveMessage(user, { ...message("new-lid"), key: { id: "new-lid", remoteJid: lid }, messageTimestamp: 110 });
+  assert.equal(listChats(user).length, 1);
+  assert.equal(listMessages(user, lid).length, 3);
+  assert.equal(markMessageDeleted(user, "old-lid", chat), true);
+  assert.equal(listMessages(user, chat).find((m) => m.id === "old-lid")?.kind, "deleted");
+  assert.equal(listChats("other-lid-session").length, 0);
+});
+
+test("consolidação só usa identidade comprovada dentro da própria conta", () => {
+  const lid = "323456789@lid";
+  for (const user of ["identity-one", "identity-two"]) {
+    saveMessage(user, { ...message("lid"), key: { id: "lid", remoteJid: lid }, messageTimestamp: 110 });
+    saveMessage(user, message("phone"));
+  }
+  db.prepare("INSERT INTO auth VALUES(?,?,?)").run("identity-one", "lid-mapping-323456789_reverse", JSON.stringify(chat.split("@")[0]));
+  assert.equal(listChats("identity-two").length, 2);
+  const rows = listChats("identity-one") as { id: string; lastText: string; updatedAt: number }[];
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].lastText, "lid");
+  assert.equal(rows[0].updatedAt, 110000);
+  assert.equal(listChats("identity-one").length, 1);
+});
+
+test("número alternativo comprovado reconcilia LID antigo sem chave de autenticação", () => {
+  const user = "duplicate-alt";
+  const lid = "223456789@lid";
+  saveMessage(user, { ...message("unresolved"), key: { id: "unresolved", remoteJid: lid } });
+  assert.equal((listChats(user)[0] as { id: string }).id, lid);
+  saveMessage(user, { ...message("resolved"), key: { id: "resolved", remoteJid: lid, remoteJidAlt: chat } });
+  assert.equal(listChats(user).length, 1);
+  assert.deepEqual(listMessages(user, chat).map((m) => m.id), ["resolved", "unresolved"]);
+  assert.equal((listChats(user)[0] as { id: string }).id, chat);
+});
+
 test("Status com número alternativo não entra na conversa nem altera sua prévia", () => {
   const user = "status-filter";
   saveMessage(user, message("real-message"));

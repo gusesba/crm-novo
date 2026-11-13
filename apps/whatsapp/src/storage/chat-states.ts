@@ -6,29 +6,13 @@ import type {
 } from "@whiskeysockets/baileys";
 import { proto } from "@whiskeysockets/baileys";
 import { db } from "./database.js";
+import { canonicalChatId, normalizeChats } from "./chat-identity.js";
 import { sessionNumber } from "./backups.js";
 
 let lastUnreadUpdate = 0;
 function unreadUpdateTime() {
   lastUnreadUpdate = Math.max(Date.now(), lastUnreadUpdate + 1);
   return lastUnreadUpdate;
-}
-
-function canonicalChatId(user: string, id: string) {
-  if (!id.endsWith("@lid")) return id;
-  const lid = id.slice(0, id.indexOf("@")).split(":")[0];
-  const mapping = db
-    .prepare("SELECT value FROM auth WHERE user_id=? AND key=?")
-    .get(user, `lid-mapping-${lid}_reverse`) as { value: string } | undefined;
-  if (!mapping) return id;
-  try {
-    const phone = JSON.parse(mapping.value);
-    return typeof phone === "string" && /^\d+$/.test(phone)
-      ? `${phone}@s.whatsapp.net`
-      : id;
-  } catch {
-    return id;
-  }
 }
 
 function normalizeChatStates(user: string) {
@@ -128,6 +112,7 @@ export function syncMessageRead(user: string, key: WAMessageKey) {
 }
 
 export function listChats(user: string) {
+  normalizeChats(user);
   normalizeChatStates(user);
   return db
     .prepare(

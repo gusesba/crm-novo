@@ -5,6 +5,7 @@ import {
   type WAMessage,
 } from "@whiskeysockets/baileys";
 import { db } from "./database.js";
+import { canonicalChatId, normalizeChats } from "./chat-identity.js";
 import { conversationName, savePushName } from "./contacts.js";
 import { messageReply } from "./message-replies.js";
 import { messageMetadata, preserveMessageSecret, type StoredMessage } from "./message-metadata.js";
@@ -17,7 +18,7 @@ export function saveMessage(user: string, msg: WAMessage, sourceNumber?: string)
     backupDetachedMessage(user, sourceNumber, msg);
     return;
   }
-  const jid = messageChatId(msg);
+  const jid = messageChatId(msg, user);
   if (!jid || jid === "status@broadcast" || !msg.key.id || !msg.message) return;
   let content = normalizeMessageContent(msg.message);
   if (!content) return;
@@ -33,7 +34,7 @@ export function saveMessage(user: string, msg: WAMessage, sourceNumber?: string)
   const edit = content.protocolMessage?.editedMessage;
   if (edit && content.protocolMessage?.key?.id) {
     const original = rawMessage(user, content.protocolMessage.key.id);
-    if (original && messageChatId(original) === jid) {
+    if (original && messageChatId(original, user) === jid) {
       const edited = { ...original, message: preserveMessageSecret(edit, original.message),
         crmMetadata: { ...messageMetadata(original), edited: true, editedAt: Number(content.protocolMessage?.timestampMs || Number(msg.messageTimestamp || 0) * 1000) } };
       saveMessage(user, edited);
@@ -50,7 +51,7 @@ export function saveMessage(user: string, msg: WAMessage, sourceNumber?: string)
   }
   if (content.protocolMessage || content.senderKeyDistributionMessage) return;
   const previous = rawMessage(user, msg.key.id);
-  const prior = previous && messageChatId(previous) === jid ? previous as StoredMessage : undefined;
+  const prior = previous && messageChatId(previous, user) === jid ? previous as StoredMessage : undefined;
   if (prior?.crmMetadata?.editedAt && !messageMetadata(msg).edited) {
     // Um snapshot antigo da original não deve desfazer uma revisão já confirmada.
     msg = { ...msg, message: preserveMessageSecret(prior.message!, msg.message), crmMetadata: prior.crmMetadata } as StoredMessage;
@@ -92,7 +93,7 @@ export function saveMessage(user: string, msg: WAMessage, sourceNumber?: string)
   }
   const name = conversationName(user, jid) || jid;
   const metadata = messageMetadata(msg);
-  if (previous && messageChatId(previous) === jid) {
+  if (previous && messageChatId(previous, user) === jid) {
     const known = messageMetadata(previous);
     metadata.edited ||= known.edited;
     metadata.forwarded ||= known.forwarded;
@@ -127,11 +128,12 @@ export function saveMessage(user: string, msg: WAMessage, sourceNumber?: string)
   backupMessage(user, msg.key.id!);
   replayEncryptedEdits(user, jid, msg.key.id!, saveMessage);
 }
-export function messageChatId(message: WAMessage) {
-  return message.key.remoteJid?.endsWith("@lid") &&
+export function messageChatId(message: WAMessage, user?: string) {
+  const id = message.key.remoteJid?.endsWith("@lid") &&
     message.key.remoteJidAlt?.endsWith("@s.whatsapp.net")
     ? message.key.remoteJidAlt
     : message.key.remoteJid;
+  return user && id ? canonicalChatId(user, id) : id;
 }
 export function canDeleteForEveryone(
   mine: boolean,
@@ -183,6 +185,8 @@ export function listMessages(
   before = Date.now() + 1000,
   beforeId = "",
 ) {
+  normalizeChats(user);
+  chatId = canonicalChatId(user, chatId);
   const messages = db
     .prepare(
       `SELECT id,chat_id AS chatId,text,mine,kind,timestamp,raw FROM messages
@@ -340,7 +344,7 @@ export function saveMessageReaction(
 
 export function markMessageDeleted(user: string, id: string, chatId: string) {
   const original = rawMessage(user, id);
-  if (!original || messageChatId(original) !== chatId) return false;
+  if (!original || messageChatId(original, user) !== chatId) return false;
   removeStoredMedia(user, id);
   const raw = JSON.stringify(
     {

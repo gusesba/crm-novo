@@ -86,6 +86,21 @@ test("editar pelo CRM marca após sucesso, preserva citação/encaminhamento e f
   assert.equal(listMessages("local-failure", chat)[0].text, "Antes");
 });
 
+test("edição de mensagem antiga por LID funciona após consolidar o histórico pelo telefone", async () => {
+  const user = "edit-consolidated";
+  const lid = "423456789@lid";
+  saveMessage(user, { ...message("original", { conversation: "Antes" }, true),
+    key: { id: "original", remoteJid: lid, fromMe: true } });
+  db.prepare("INSERT INTO auth VALUES(?,?,?)").run(user, "lid-mapping-423456789_reverse", JSON.stringify(chat.split("@")[0]));
+  assert.equal(listMessages(user, chat).length, 1);
+  await editMessage(user, "original", chat, "Depois", () => ({ sendMessage: async (_jid, content) => {
+    assert.equal((content as { edit: { remoteJid: string } }).edit.remoteJid, lid);
+    return undefined;
+  } }));
+  assert.equal(listMessages(user, chat)[0].text, "Depois");
+  assert.equal(listMessages(user, chat)[0].edited, true);
+});
+
 test("revogação remove os indicadores sem remover o balão apagado", () => {
   saveMessage("deleted", message("old", { editedMessage: { message: { extendedTextMessage: { text: "Antes", contextInfo: { isForwarded: true } } } } }));
   markMessageDeleted("deleted", "old", chat);
