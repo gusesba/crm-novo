@@ -2,13 +2,14 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
-export function CampaignAudienceFilter({ label, options, values, onChange, emptyLabel, disabled = false }: {
+export function CampaignAudienceFilter({ label, options, values, onChange, emptyLabel, disabled = false, selectAll = false }: {
   label: string;
   options: { value: string; label: string }[];
   values: string[];
   onChange: (values: string[]) => void;
   emptyLabel: string;
   disabled?: boolean;
+  selectAll?: boolean;
 }) {
   const labelId = useId();
   const [open, setOpen] = useState(false);
@@ -46,7 +47,16 @@ export function CampaignAudienceFilter({ label, options, values, onChange, empty
         </button>
         {open && (
           <div id={labelId + "-options"} className="campaign-multi-options" role="group" aria-labelledby={labelId}>
-            <button type="button" className="text-button" disabled={disabled || !values.length} onClick={() => onChange([])}>Limpar filtro {label}</button>
+            {selectAll ? (
+              <label>
+                <input type="checkbox" aria-label={`Marcar/desmarcar todos · ${label}`}
+                  checked={options.length > 0 && options.every((option) => values.includes(option.value))}
+                  ref={(input) => { if (input) input.indeterminate = options.some((option) => values.includes(option.value)) && !options.every((option) => values.includes(option.value)); }}
+                  disabled={disabled || !options.length}
+                  onChange={(event) => onChange(event.target.checked ? options.map((option) => option.value) : [])} />
+                <span>Marcar/desmarcar todos</span>
+              </label>
+            ) : <button type="button" className="text-button" disabled={disabled || !values.length} onClick={() => onChange([])}>Limpar filtro {label}</button>}
             {options.map((option) => (
               <label key={option.value}>
                 <input type="checkbox" aria-label={option.label} checked={values.includes(option.value)} disabled={disabled}

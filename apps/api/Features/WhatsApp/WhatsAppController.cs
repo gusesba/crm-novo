@@ -186,7 +186,6 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
         var sellerIds = (r.SellerIds ?? []).Concat(r.SellerId.HasValue ? [r.SellerId.Value] : []).Distinct().ToArray();
         var branchIds = (r.BranchIds ?? []).Concat(r.BranchId.HasValue ? [r.BranchId.Value] : []).Distinct().ToArray();
         var classificationIds = (r.ClassificationIds ?? []).Concat(r.ClassificationId.HasValue ? [r.ClassificationId.Value] : []).Distinct().ToArray();
-        if (sellerIds.Length > 0 && !current.IsAdmin) throw new BusinessException("Filtro de vendedor disponível apenas para administradores.", 403);
         if (branchIds.Length > 0 && !(current.IsAdmin && current.BranchId == null)) throw new BusinessException("Filtro de sede disponível apenas para o administrador geral.", 403);
         var query = current.Scope(db.Leads.AsNoTracking()).Where(x => x.Status != LeadStatuses.OptOut && db.Branches.Any(b => b.Id == x.BranchId && b.Active));
         if (r.CreatedFrom.HasValue) query = query.Where(x => x.CreatedAt >= r.CreatedFrom.Value);

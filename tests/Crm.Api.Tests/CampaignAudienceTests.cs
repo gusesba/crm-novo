@@ -133,7 +133,7 @@ public class CampaignAudienceTests
         Assert.Equal(new[] { 1, 2 }, CampaignIds(scoped));
         var global = await admin.GetFromJsonAsync<JsonElement>($"/api/whatsapp/campaign-recipients?createdFrom=2001-02-10T03:00:00Z&createdTo=2001-02-11T03:00:00Z&branchId={otherBranchId}&sellerId=1");
         Assert.Equal(new[] { otherLeadId }, CampaignIds(global));
-        Assert.Equal(HttpStatusCode.Forbidden, (await seller.GetAsync($"/api/whatsapp/campaign-recipients?{query}&sellerId=3")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await seller.GetAsync($"/api/whatsapp/campaign-recipients?{query}&sellerId=3")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await seller.GetAsync($"/api/whatsapp/campaign-recipients?{query}&branchId={otherBranchId}")).StatusCode);
     }
 
@@ -275,7 +275,47 @@ public class CampaignAudienceTests
     }
 
     [Theory]
-    [InlineData("sellerIds=2&sellerIds=3", true)]
+    [InlineData("sellerId=3")]
+    [InlineData("sellerIds=3")]
+    public async Task SellerFilterUsesCurrentSellerAndPreservesBranchOnListPreviewAndDispatch(string query)
+    {
+        using var factory = new CampaignFactory();
+        using var seller = await factory.Login("camila");
+        int ownId, colleagueId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CrmDbContext>();
+            var branch = new Branch { Name = "Outra sede do filtro" };
+            db.Branches.Add(branch);
+            await db.SaveChangesAsync();
+            var own = new Lead { Name = "Filtro vendedora propria", Phone = "5551988778101",
+                BranchId = 1, SellerId = 3, CurrentSellerId = 2 };
+            var colleague = new Lead { Name = "Filtro vendedora colega", Phone = "5551988778102",
+                BranchId = 1, SellerId = 2, CurrentSellerId = 3 };
+            db.Leads.AddRange(own, colleague,
+                new Lead { Name = "Filtro vendedora fora", Phone = "5551988778103",
+                    BranchId = branch.Id, SellerId = 3, CurrentSellerId = 3 });
+            await db.SaveChangesAsync();
+            ownId = own.Id;
+            colleagueId = colleague.Id;
+        }
+        var page = await seller.GetFromJsonAsync<JsonElement>($"/api/whatsapp/campaign-recipients?search=Filtro%20vendedora&{query}");
+        Assert.Equal(new[] { colleagueId }, CampaignIds(page));
+        var payload = new { name = "Filtro", messages = new[] { new { text = "Teste" } },
+            search = "Filtro vendedora", sellerId = query.StartsWith("sellerId=") ? (int?)3 : null,
+            sellerIds = query.StartsWith("sellerIds=") ? new[] { 3 } : null };
+        var preview = await seller.PostAsJsonAsync("/api/whatsapp/campaigns/preview", payload);
+        preview.EnsureSuccessStatusCode();
+        Assert.Equal(colleagueId, Assert.Single((await preview.Content.ReadFromJsonAsync<Lead[]>())!).Id);
+        (await seller.PostAsJsonAsync("/api/whatsapp/campaigns", payload)).EnsureSuccessStatusCode();
+        Assert.Equal(new[] { colleagueId }, Assert.Single(factory.Handler.Recipients));
+        var ownPage = await seller.GetFromJsonAsync<JsonElement>("/api/whatsapp/campaign-recipients?search=Filtro%20vendedora&sellerIds=2");
+        Assert.Equal(new[] { ownId }, CampaignIds(ownPage));
+        var all = await seller.GetFromJsonAsync<JsonElement>("/api/whatsapp/campaign-recipients?search=Filtro%20vendedora");
+        Assert.Equal(new[] { colleagueId, ownId }, CampaignIds(all));
+    }
+
+    [Theory]
     [InlineData("branchIds=1&branchIds=2", false)]
     public async Task MultipleAudienceFiltersPreservePermissionsOnAllEndpoints(string query, bool sellers)
     {
@@ -406,7 +446,9 @@ public class CampaignAudienceTests
         (await global.PostAsJsonAsync("/api/leads", new { branchId = branch.Id, sellerId = 1, name = "Outra sede", phone = "5551988883001", status = LeadStatuses.Contact, origin = "site" })).EnsureSuccessStatusCode();
         var otherBranch = await global.GetFromJsonAsync<JsonElement>($"/api/whatsapp/campaign-recipients?branchId={branch.Id}&sellerId=1");
         Assert.Single(otherBranch.GetProperty("items").EnumerateArray());
-        Assert.Equal(HttpStatusCode.Forbidden, (await seller.GetAsync("/api/whatsapp/campaign-recipients?sellerId=3")).StatusCode);
+        var sellerPage = await seller.GetFromJsonAsync<JsonElement>("/api/whatsapp/campaign-recipients?sellerId=3&pageSize=100");
+        Assert.NotEmpty(CampaignIds(sellerPage));
+        Assert.All(sellerPage.GetProperty("items").EnumerateArray(), lead => { Assert.Equal(1, lead.GetProperty("branchId").GetInt32()); Assert.Equal(3, lead.GetProperty("currentSellerId").GetInt32()); });
         Assert.Equal(HttpStatusCode.Forbidden, (await seller.GetAsync($"/api/whatsapp/campaign-recipients?branchId={branch.Id}")).StatusCode);
         using var scoped = await factory.Login("branchadmin");
         var scopedPage = await scoped.GetFromJsonAsync<JsonElement>("/api/whatsapp/campaign-recipients?sellerId=3&pageSize=100");

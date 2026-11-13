@@ -58,8 +58,8 @@ function CampaignsContent() {
     search: "",
     statuses: ["Agendar Contato", "Stand By"],
     classificationIds: [] as string[],
-    serviceIds: [] as string[],
-    sellerIds: [] as string[],
+    serviceIds: ["none", ...(catalog?.services ?? []).map((service) => String(service.id))],
+    sellerIds: user ? [String(user.id)] : [],
     branchIds: [] as string[],
     groupId: "",
     createdFrom: "",
@@ -83,6 +83,7 @@ function CampaignsContent() {
     setAllSelected(true);
     setPage(1);
   }
+  const noServices = !filters.serviceIds.length;
   const invalidDates = !!(filters.createdFrom && filters.createdTo && filters.createdFrom > filters.createdTo);
   let createdTo: string | null = null;
   if (filters.createdTo) {
@@ -108,11 +109,11 @@ function CampaignsContent() {
     else if (value !== null) params.set(key, String(value));
   });
   const leads = useResource<PageResult<Lead>>(
-    invalidDates || (mode === "group" && !filters.groupId)
+    invalidDates || noServices || (mode === "group" && !filters.groupId)
       ? null
       : `/whatsapp/campaign-recipients?${params}`,
   );
-  const selectionCount = invalidDates ? 0 : allSelected
+  const selectionCount = invalidDates || noServices ? 0 : allSelected
     ? Math.max(0, (leads.data?.total || 0) - excluded.length)
     : selected.length;
   function toggleLead(id: number, checked: boolean) {
@@ -127,7 +128,7 @@ function CampaignsContent() {
   }
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (invalidDates || readingFiles) return;
+    if (invalidDates || noServices || readingFiles) return;
     setError("");
     const invalidIndex = messages.findIndex(
       (message) => !message.text.trim() && !messageAttachments(message).length,
@@ -246,7 +247,7 @@ function CampaignsContent() {
                 options={(classifications.data ?? []).map((item) => ({ value: String(item.id), label: item.name }))}
               />
               <CampaignAudienceFilter
-                label="Serviço" emptyLabel="Todos os serviços"
+                label="Serviço" emptyLabel="Nenhum serviço selecionado" selectAll
                 values={filters.serviceIds} onChange={(values) => changeFilter("serviceIds", values)}
                 options={[{ value: "none", label: "Sem serviço" }, ...(catalog?.services ?? []).map((service) => ({ value: String(service.id), label: service.name }))]}
               />
@@ -257,9 +258,9 @@ function CampaignsContent() {
                   options={(catalog?.branches ?? []).filter((branch) => branch.active).map((branch) => ({ value: String(branch.id), label: branch.name }))}
                 />
               )}
-              {user?.isAdmin && (
+              {user && (
                 <CampaignAudienceFilter
-                  label="Vendedor" emptyLabel="Todos os vendedores"
+                  label="Vendedoras" emptyLabel="Todas as vendedoras"
                   values={filters.sellerIds} onChange={(values) => changeFilter("sellerIds", values)}
                   options={(catalog?.users ?? []).filter((seller) =>
                     (!user.branchId || seller.branchId === user.branchId) &&
@@ -303,7 +304,8 @@ function CampaignsContent() {
             {leads.error && (
               <ErrorBox message={leads.error} retry={leads.reload} />
             )}
-            {!invalidDates && (mode !== "group" || filters.groupId) &&
+            {noServices && <p className="form-note">Selecione ao menos um serviço ou “Sem serviço” para listar os destinatários.</p>}
+            {!invalidDates && !noServices && (mode !== "group" || filters.groupId) &&
               (leads.loading ? (
                 <Loading />
               ) : (
