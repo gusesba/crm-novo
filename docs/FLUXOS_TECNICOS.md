@@ -10,6 +10,8 @@ Identidade LID/telefone do backup compartilhado entre contas do mesmo dono/núme
 
 Persistência da identidade LID/telefone do atendimento após desconexão/exclusão e reaplicação de edições pendentes após consolidação revisadas em **13/11/2026** (11.5, 12.1, 15.1 e 18).
 
+Inicialização com histórico volumoso e índice de consulta da identidade por JID revisados em **14/11/2026** (2.2, 17 e 18).
+
 Fluxo de resolução de números em “Nova conversa” revisado em **13/11/2026** (12.4).
 
 Fluxo de arquivamento/desarquivamento de conversas revisado em **23/10/2026** (12.5).
@@ -128,10 +130,10 @@ Fontes: [Program.cs](../apps/api/Program.cs), [SeedData.cs](../apps/api/Infrastr
 
 ### 2.2 Serviço WhatsApp
 
-1. Abre `whatsapp.db` no `DATA_DIR`, cria tabelas/índices se não existem, usa WAL e `busy_timeout=5000`.
+1. Abre `whatsapp.db` no `DATA_DIR`, cria tabelas/índices se não existem, usa WAL e `busy_timeout=5000`. O índice `messages_remote_jid` usa `json_extract(raw,'$.key.remoteJid')`, sessão e chat para localizar provas de identidade sem varrer o histórico inteiro por mensagem/LID. É criado automaticamente também sobre bancos existentes; sua construção inicial depende do volume armazenado e preserva mensagens/credenciais.
 2. Campanhas persistidas com `running` ou `queued` tornam-se `interrupted`, com erro informando reinício. Não há retomada automática.
    Após reconciliar edições e inicializar o backup textual, `initializeCampaignNumbers` preenche o dono CRM das campanhas legadas e recupera o número de origem quando comprovado por mensagens enviadas, conforme 16.6. Falha reverte essa migração e interrompe a inicialização antes de servir requisições; não executa/reenvia campanhas.
-3. Registra rotas Fastify e passa a ouvir. Executa a retenção de mídia se habilitada e agenda nova execução a cada hora conforme 10.4; falha é registrada sem derrubar o serviço. `restoreSessions()` roda em segundo plano: busca usuários com `auth.key='creds'` e chama `connect` para cada um.
+3. Registra logs antes das etapas de reconciliação de edições, preparação do backup e recuperação da origem dos disparos. Essas etapas terminam antes de registrar rotas Fastify e passar a ouvir; durante essa preparação, um container pode aparecer Up enquanto a API/proxy ainda recebem conexão recusada/502. Executa a retenção de mídia se habilitada e agenda nova execução a cada hora conforme 10.4; falha é registrada sem derrubar o serviço. `restoreSessions()` roda em segundo plano: busca usuários com `auth.key='creds'` e chama `connect` para cada um.
 4. Se restaurar uma sessão falhar, registra o erro; o servidor permanece disponível. A restauração não consulta o cadastro ativo do CRM.
 
 ### 2.3 Execução local do frontend
@@ -1150,6 +1152,8 @@ Estes pontos são parte do fluxo implementado e devem ser considerados ao valida
 15. **Limites variam por camada:** tamanho binário de anexo é 16 MiB; base64 tem teto 22.400.000 caracteres; corpo HTTP 24.000.000 bytes. Nome de contato escolhido a partir de chat também passa pela validação de 120 caracteres no serviço.
 
 ## 20. Rastreabilidade e conferência da documentação
+
+Na correção do gargalo de inicialização de **14/11/2026**, a projeção de um histórico simulado de 3.000 mensagens com 50 LIDs sem identidade resolvida executou 5.000 consultas de recuperação de identidade. Sem o índice por JID, o ensaio levou 4.168 ms, dos quais 3.692 ms nessas buscas; com o índice, levou 521 ms, dos quais 123 ms nas buscas, preservando as 3.000 mensagens e cópias textuais. Esses tempos são locais, não uma estimativa garantida para produção. [startup-history.test.ts](../apps/whatsapp/test/startup-history.test.ts) cria o schema anterior com histórico e verifica que a consulta efetivamente usada busca pelo JID indexado, sem depender de limite de tempo da máquina, além da projeção completa e integridade SQLite. Passaram os 171 testes do serviço, a checagem de tipos e o build. A criação do índice não altera o protocolo nem conecta contas.
 
 Na correção da identidade persistente do atendimento e das edições pendentes de **13/11/2026**, passaram os 170 testes do serviço WhatsApp, a checagem de tipos e seu build. Os oito casos novos em [history.test.ts](../apps/whatsapp/test/history.test.ts) e [encrypted-edits.test.ts](../apps/whatsapp/test/encrypted-edits.test.ts) cobrem edição/revogação após desconexão, exclusão de todas as mensagens ou da única referência, par PN/LID nas duas orientações, recuperação de atendimento já consolidado, isolamento por sessão e limpeza na troca de número, reaplicação após chegada do mapeamento e antes do primeiro polling, autenticação da edição com identidade persistida, preservação de chave/segredo/timestamp e rollback/repetição da consolidação em falha. A limpeza HTTP também verifica remoção de `chat_aliases` apenas das sessões afetadas. Bancos temporários e socket simulado, sem conexão ou envio real pelo WhatsApp.
 

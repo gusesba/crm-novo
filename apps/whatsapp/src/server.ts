@@ -14,8 +14,11 @@ import { initializeBackups } from "./storage/backups.js";
 import { initializeCampaignNumbers } from "./storage/campaign-numbers.js";
 
 const app = Fastify({ logger: true, bodyLimit: 24_000_000 });
+app.log.info("Reconciliando edições do histórico WhatsApp.");
 reconcileEncryptedEdits(saveMessage, deleteStoredMessage);
+app.log.info("Preparando backup textual do WhatsApp.");
 initializeBackups();
+app.log.info("Preparando histórico de disparos.");
 initializeCampaignNumbers();
 app.addHook("onRequest", async (req, reply) => {
   if (req.url === "/health") return;

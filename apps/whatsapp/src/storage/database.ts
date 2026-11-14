@@ -25,6 +25,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS pending_message_edits (user_id TEXT,id TEXT,chat_id TEXT,target_id TEXT,timestamp INTEGER,raw TEXT,PRIMARY KEY(user_id,id));
   CREATE INDEX IF NOT EXISTS pending_message_edits_target ON pending_message_edits(user_id,chat_id,target_id,timestamp);
   CREATE INDEX IF NOT EXISTS messages_chat ON messages(user_id,chat_id,timestamp);
+  CREATE INDEX IF NOT EXISTS messages_remote_jid ON messages(json_extract(raw,'$.key.remoteJid'),user_id,chat_id);
   CREATE INDEX IF NOT EXISTS messages_stickers ON messages(user_id,kind,timestamp DESC);
   CREATE TABLE IF NOT EXISTS message_reactions (user_id TEXT, message_id TEXT, sender TEXT, emoji TEXT, PRIMARY KEY(user_id,message_id,sender));
   CREATE TABLE IF NOT EXISTS profile_pictures (user_id TEXT, chat_id TEXT, mime TEXT, data BLOB, updated_at INTEGER, PRIMARY KEY(user_id,chat_id));
