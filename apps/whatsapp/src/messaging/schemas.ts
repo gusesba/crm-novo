@@ -1,4 +1,5 @@
 import { z } from "zod";
+export const chatIdSchema = z.string().regex(/^\d{10,15}@s\.whatsapp\.net$/);
 export const readChatSchema = z.object({
   chatId: z.string().max(100).regex(/^[^@\s]+@(s\.whatsapp\.net|g\.us|lid)$/),
   lastMessageId: z.string().min(1).max(200),
@@ -14,7 +15,7 @@ export const attachmentSchema = z.object({
 });
 const contactSchema = z.object({
   name: z.string().trim().min(1).max(120),
-  phone: z.string().regex(/^\d{12,15}$/),
+  phone: z.string().regex(/^\d{10,15}$/),
 });
 const sendAttachmentSchema = attachmentSchema.extend({
   voiceNote: z.boolean().optional(),
@@ -27,7 +28,7 @@ export function messageAttachments<T>(message: { attachment?: T | null; attachme
 }
 export const sendSchema = z
   .object({
-    chatId: z.string().regex(/^\d{12,15}@s\.whatsapp\.net$/),
+    chatId: chatIdSchema,
     text: z.string().max(10000).nullish(),
     attachment: sendAttachmentSchema.nullish(),
     attachments: z.array(sendAttachmentSchema).max(10).nullish(),
@@ -53,7 +54,6 @@ export const sendSchema = z
   .refine((x) => !x.attachment?.voiceNote || !x.attachment.asDocument, {
     message: "Mensagem de voz não pode ser enviada como documento.",
   });
-export const chatIdSchema = z.string().regex(/^\d{12,15}@s\.whatsapp\.net$/);
 export const reactionSchema = z.object({
   chatId: chatIdSchema,
   emoji: z.enum(["", "👍", "❤️", "😂", "😮", "😢", "🙏"]),

@@ -84,6 +84,43 @@ test("mensagens individuais não aceitam grupos ou identificadores arbitrários"
     false,
   );
 });
+test("envio e ações aceitam os mesmos IDs de dez a quinze dígitos da agenda", () => {
+  for (const phone of ["1234567890", "12166321952", "5551999999999", "123456789012345"]) {
+    const chatId = `${phone}@s.whatsapp.net`;
+    for (const content of [
+      { text: "Oi" },
+      { attachment: { name: "a.pdf", mime: "application/pdf", data: "YQ==" } },
+      { text: "", attachments: [], contact: { name: "Ana", phone } },
+    ]) {
+      const input = sendSchema.parse({ chatId, ...content });
+      assert.equal(input.chatId, chatId);
+      if (input.contact) assert.equal(input.contact.phone, phone);
+    }
+    assert.equal(reactionSchema.safeParse({ chatId, emoji: "👍" }).success, true);
+    assert.equal(forwardSchema.safeParse({ chatId }).success, true);
+    assert.equal(deleteSchema.safeParse({ chatId, forEveryone: false }).success, true);
+  }
+});
+
+test("envio e ações rejeitam IDs fora dos limites e destinos que não sejam telefones individuais", () => {
+  const invalidIds = [
+    "123456789@s.whatsapp.net", "1234567890123456@s.whatsapp.net",
+    "12166321952@g.us", "12166321952@lid", "status@broadcast", "../../other",
+    "+12166321952@s.whatsapp.net", "121 66321952@s.whatsapp.net",
+  ];
+  for (const chatId of invalidIds) {
+    assert.equal(sendSchema.safeParse({ chatId, text: "Oi" }).success, false);
+    assert.equal(reactionSchema.safeParse({ chatId, emoji: "👍" }).success, false);
+    assert.equal(forwardSchema.safeParse({ chatId }).success, false);
+    assert.equal(deleteSchema.safeParse({ chatId, forEveryone: true }).success, false);
+  }
+  for (const phone of ["123456789", "1234567890123456", "+12166321952", "121 66321952"]) {
+    assert.equal(sendSchema.safeParse({
+      chatId: "12166321952@s.whatsapp.net", contact: { name: "Ana", phone },
+    }).success, false);
+  }
+});
+
 test("contato e áudio de voz exigem dados válidos", () => {
   const chatId = "5551999999999@s.whatsapp.net";
   assert.equal(

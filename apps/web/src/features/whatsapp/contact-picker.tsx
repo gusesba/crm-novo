@@ -18,7 +18,7 @@ export function ContactPicker({
   const available = chats
     .filter(
       (chat) =>
-        /^\d{12,15}@s\.whatsapp\.net$/.test(chat.id) &&
+        /^\d{10,15}@s\.whatsapp\.net$/.test(chat.id) &&
         `${chat.name} ${chat.id}`.toLowerCase().includes(search.toLowerCase()),
     )
     .slice(0, 30);
@@ -26,7 +26,7 @@ export function ContactPicker({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const digits = phone.replace(/\D/g, "");
-    if (!name.trim() || !/^\d{12,15}$/.test(digits)) return;
+    if (!name.trim() || !/^\d{10,15}$/.test(digits)) return;
     onSelect({ name: name.trim(), phone: digits });
   }
 
@@ -84,7 +84,7 @@ export function ContactPicker({
           <button
             className="button secondary"
             disabled={
-              !name.trim() || !/^\d{12,15}$/.test(phone.replace(/\D/g, ""))
+              !name.trim() || !/^\d{10,15}$/.test(phone.replace(/\D/g, ""))
             }
           >
             Selecionar contato
