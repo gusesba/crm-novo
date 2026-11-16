@@ -160,7 +160,7 @@ export function Conversation({
               if (element) messageElements.current.set(m.id, element);
               else messageElements.current.delete(m.id);
             }}>
-              {!backup && chatId.endsWith("@s.whatsapp.net") && (
+              {!backup && (chatId.endsWith("@s.whatsapp.net") || chatId.endsWith("@g.us")) && (
                 <MessageActionsMenu
                   message={m}
                   onReply={() => {
@@ -264,7 +264,7 @@ export function Conversation({
         )}
         <div ref={end} />
       </div>
-      {!backup && chatId.endsWith("@s.whatsapp.net") ? (
+      {!backup && (chatId.endsWith("@s.whatsapp.net") || chatId.endsWith("@g.us")) ? (
         <MessageComposer
           key={editing?.id || "new"}
           chatId={chatId}

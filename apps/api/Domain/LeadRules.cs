@@ -16,6 +16,8 @@ public static partial class LeadRules
 {
     public static string NormalizePhone(string input)
     {
+        if (input.Trim().EndsWith("@g.us", StringComparison.OrdinalIgnoreCase))
+            throw new BusinessException("Grupos do WhatsApp não podem ser cadastrados como lead.");
         var phone = Digits().Replace(input, "");
         if (phone.Length is 10 or 11) phone = "55" + phone;
         if (phone.Length is < 12 or > 15 || phone.StartsWith('0'))

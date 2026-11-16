@@ -1,5 +1,5 @@
 import { z } from "zod";
-export const chatIdSchema = z.string().regex(/^\d{10,15}@s\.whatsapp\.net$/);
+export const chatIdSchema = z.string().max(100).regex(/^(?:\d{10,15}@s\.whatsapp\.net|\d+(?:-\d+)?@g\.us)$/);
 export const readChatSchema = z.object({
   chatId: z.string().max(100).regex(/^[^@\s]+@(s\.whatsapp\.net|g\.us|lid)$/),
   lastMessageId: z.string().min(1).max(200),

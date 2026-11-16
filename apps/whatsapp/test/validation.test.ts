@@ -64,7 +64,7 @@ test("intervalo mínimo impede loops sem pausa", () => {
     false,
   );
 });
-test("mensagens individuais não aceitam grupos ou identificadores arbitrários", () => {
+test("mensagens aceitam grupos e rejeitam identificadores arbitrários", () => {
   assert.equal(
     sendSchema.safeParse({ chatId: "5551999999999@s.whatsapp.net", text: "Oi" })
       .success,
@@ -72,7 +72,7 @@ test("mensagens individuais não aceitam grupos ou identificadores arbitrários"
   );
   assert.equal(
     sendSchema.safeParse({ chatId: "123@g.us", text: "Oi" }).success,
-    false,
+    true,
   );
   assert.equal(
     sendSchema.safeParse({ chatId: "../../other", text: "Oi" }).success,
@@ -102,10 +102,11 @@ test("envio e ações aceitam os mesmos IDs de dez a quinze dígitos da agenda",
   }
 });
 
-test("envio e ações rejeitam IDs fora dos limites e destinos que não sejam telefones individuais", () => {
+test("envio e ações rejeitam IDs fora dos limites e destinos não suportados", () => {
   const invalidIds = [
     "123456789@s.whatsapp.net", "1234567890123456@s.whatsapp.net",
-    "12166321952@g.us", "12166321952@lid", "status@broadcast", "../../other",
+    "abc@g.us", "123--456@g.us", "123@@g.us", "123 @g.us", `${"1".repeat(100)}@g.us`,
+    "12166321952@lid", "status@broadcast", "../../other",
     "+12166321952@s.whatsapp.net", "121 66321952@s.whatsapp.net",
   ];
   for (const chatId of invalidIds) {
@@ -202,7 +203,7 @@ test("lotes são limitados a 500 contatos", () => {
     false,
   );
 });
-test("ações de mensagem aceitam somente conversas individuais válidas", () => {
+test("ações de mensagem aceitam conversas individuais e grupos válidos", () => {
   const chatId = "5551999999999@s.whatsapp.net";
   assert.equal(reactionSchema.safeParse({ chatId, emoji: "❤️" }).success, true);
   assert.equal(forwardSchema.safeParse({ chatId }).success, true);
@@ -212,6 +213,20 @@ test("ações de mensagem aceitam somente conversas individuais válidas", () =>
   );
   assert.equal(
     reactionSchema.safeParse({ chatId: "123@g.us", emoji: "👍" }).success,
-    false,
+    true,
   );
+});
+
+test("grupos atuais e legados aceitam envio e ações, mas continuam fora dos disparos", () => {
+  for (const chatId of ["120363123456789012@g.us", "5511999999999-1234567890@g.us"]) {
+    for (const content of [
+      { text: "Olá, grupo" },
+      { attachments: [{ name: "a.pdf", mime: "application/pdf", data: "YQ==" }] },
+      { contact: { name: "Ana", phone: "5551999999999" } },
+    ]) assert.equal(sendSchema.parse({ chatId, ...content }).chatId, chatId);
+    assert.equal(reactionSchema.safeParse({ chatId, emoji: "👍" }).success, true);
+    assert.equal(forwardSchema.safeParse({ chatId }).success, true);
+    assert.equal(deleteSchema.safeParse({ chatId, forEveryone: true }).success, true);
+    assert.equal(campaignSchema.safeParse({ ...campaign, recipients: [{ leadId: 1, phone: chatId, name: "Grupo" }] }).success, false);
+  }
 });

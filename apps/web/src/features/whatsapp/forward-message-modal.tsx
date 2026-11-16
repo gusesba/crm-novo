@@ -24,7 +24,7 @@ export function ForwardMessageModal({
   const [error, setError] = useState("");
   const available = chats.filter(
     (chat) =>
-      chat.id.endsWith("@s.whatsapp.net") &&
+      (chat.id.endsWith("@s.whatsapp.net") || chat.id.endsWith("@g.us")) &&
       `${chat.name} ${chat.id}`.toLowerCase().includes(search.toLowerCase()),
   );
 
@@ -47,7 +47,7 @@ export function ForwardMessageModal({
   return (
     <Modal
       title="Encaminhar mensagem"
-      description="Escolha uma conversa individual."
+      description="Escolha uma conversa individual ou um grupo."
       onClose={onClose}
     >
       <div className="modal-form">
