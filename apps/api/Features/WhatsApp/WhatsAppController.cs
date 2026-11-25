@@ -244,9 +244,9 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
         if (chatId.Length <= 100 && System.Text.RegularExpressions.Regex.IsMatch(chatId, @"^[0-9]+(?:-[0-9]+)?@g\.us$")) return;
         if (!chatId.EndsWith("@s.whatsapp.net")) throw new BusinessException("Selecione uma conversa individual com telefone identificado ou um grupo do WhatsApp.");
         var number = chatId.Split('@')[0];
-        var phone = LeadRules.NormalizePhone(number);
-        var leads = await current.Scope(db.Leads).Where(x => x.Phone == phone || x.Phone == number).ToListAsync();
-        if (leads.Any(x => x.Status == LeadStatuses.OptOut)) throw new BusinessException("Este contato está marcado como Não Enviar Mais.", 403);
+        var variants = LeadRules.PhoneVariants(LeadRules.NormalizePhone(number));
+        if (await current.Scope(db.Leads).AnyAsync(x => x.Status == LeadStatuses.OptOut && (variants.Contains(x.Phone) || x.Phone == number)))
+            throw new BusinessException("Este contato está marcado como Não Enviar Mais.", 403);
     }
 }
 public record AttachmentRequest(string Name, string Mime, string Data, bool VoiceNote = false, bool AsDocument = false);

@@ -25,6 +25,12 @@ public static partial class LeadRules
         return phone;
     }
 
+    public static string[] PhoneVariants(string phone)
+    {
+        if (!BrazilianMobile().IsMatch(phone)) return [phone];
+        return [phone, phone.Length == 13 ? phone.Remove(4, 1) : phone.Insert(4, "9")];
+    }
+
     public static void Transfer(Lead lead, int sellerId, bool permanent)
     {
         lead.CurrentSellerId = sellerId;
@@ -38,6 +44,9 @@ public static partial class LeadRules
 
     [GeneratedRegex("[^0-9]")]
     private static partial Regex Digits();
+
+    [GeneratedRegex(@"\A55[1-9][0-9]9?[6-9][0-9]{7}\z")]
+    private static partial Regex BrazilianMobile();
 }
 
 public class BusinessException(string message, int status = 400) : Exception(message)

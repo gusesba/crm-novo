@@ -27,4 +27,4 @@ public class LeadRequest
     public int Revision { get; set; }
 }
 public record TransferRequest(int[] LeadIds, int SellerId, bool Permanent, [Range(1, int.MaxValue)] int? BranchId = null);
-public record LinkRequest(string ChatId);
+public record LinkRequest([Required, RegularExpression(@"^[0-9]{10,15}@s\.whatsapp\.net$")] string ChatId);

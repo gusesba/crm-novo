@@ -6,7 +6,7 @@ import { LeadForm } from "@/features/leads/lead-form";
 import { Classifications } from "@/features/leads/classifications";
 import { useWhatsAppResource as useResource } from "./account-context";
 import { chatViews, type ChatView } from "@/lib/chat-groups";
-import type { Chat, Lead, PageResult, SharedContact } from "@/lib/types";
+import type { Chat, Lead, SharedContact } from "@/lib/types";
 import { Archive, ArchiveRestore, Link2, Plus, Search } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useContext, useEffect, useState } from "react";
@@ -55,14 +55,15 @@ function ChatContent({ backup }: { backup: boolean }) {
   const chats = useResource<Chat[]>(backup
     ? `/whatsapp/backup/chats?number=${encodeURIComponent(backupNumber)}${historyUser ? `&userId=${historyUser}` : ""}`
     : `/whatsapp/chats${suffix}`, 5000);
-  const leadMatch = useResource<PageResult<Lead>>(
-    chat && !backup && chat.id.endsWith("@s.whatsapp.net")
-      ? `/leads?mine=true&search=${chat.id.split("@")[0]}`
+  const individualChat = chat && !backup && /^[0-9]{10,15}@s\.whatsapp\.net$/.test(chat.id);
+  const leadMatch = useResource<{ chatId: string; lead: Lead | null; ambiguous: boolean }>(
+    individualChat
+      ? `/leads/conversation-match?chatId=${encodeURIComponent(chat.id)}`
       : null,
   );
-  const matchedLead = leadMatch.data?.items.find(
-    (l) => l.phone === chat?.id.split("@")[0],
-  );
+  const match = individualChat && !leadMatch.loading && !leadMatch.error && leadMatch.data?.chatId === chat.id
+    ? leadMatch.data : undefined;
+  const matchedLead = match?.lead;
   const linkedLead =
     matchedLead &&
     matchedLead.chatId === chat?.id &&
@@ -142,6 +143,9 @@ function ChatContent({ backup }: { backup: boolean }) {
       {!backup && <Connection />}
       {(error || chats.error) && (
         <ErrorBox message={error || chats.error} retry={chats.reload} />
+      )}
+      {individualChat && leadMatch.error && (
+        <ErrorBox message={leadMatch.error} retry={leadMatch.reload} />
       )}
       <section className="panel chat-layout">
         <aside className="chat-sidebar">
@@ -250,8 +254,8 @@ function ChatContent({ backup }: { backup: boolean }) {
                 </button>
               )}
               {!backup && classificationLeadId && <Classifications key={classificationLeadId} leadId={classificationLeadId} onSaved={chats.reload} />}
-              {!backup &&
-                chat.id.endsWith("@s.whatsapp.net") &&
+              {match?.ambiguous && <span role="status">Há mais de um lead com este telefone.</span>}
+              {match && !match.ambiguous &&
                 (matchedLead ? (
                   <>
                     <button
@@ -260,7 +264,7 @@ function ChatContent({ backup }: { backup: boolean }) {
                     >
                       Abrir lead
                     </button>
-                    {!matchedLead.chatId && (
+                    {!matchedLead.chatId && matchedLead.currentSellerId === user?.id && (
                       <button
                         className="icon-button"
                         aria-label="Vincular lead"

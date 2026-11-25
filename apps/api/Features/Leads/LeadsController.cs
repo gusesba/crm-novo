@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Crm.Api.Domain;
 using Crm.Api.Infrastructure;
 using Crm.Api.Features.WhatsApp;
@@ -82,13 +83,33 @@ public class LeadsController(CrmDbContext db, CurrentUser current, LeadService s
     }
     [HttpPost("transfer"), Authorize(Policy = "admin")]
     public async Task<IActionResult> Transfer(TransferRequest r) { await service.Transfer(r); return NoContent(); }
+    [HttpGet("conversation-match")]
+    public async Task<object> ConversationMatch([Required, RegularExpression(@"^[0-9]{10,15}@s\.whatsapp\.net$")] string chatId)
+    {
+        var number = chatId.Split('@')[0];
+        var variants = LeadRules.PhoneVariants(LeadRules.NormalizePhone(number));
+        var matches = await current.Scope(db.Leads.AsNoTracking())
+            .Where(x => (x.ChatId == chatId && x.ChatUserId == current.Id) || x.Phone == number || variants.Contains(x.Phone))
+            .OrderByDescending(x => x.ChatId == chatId && x.ChatUserId == current.Id)
+            .Take(2).ToListAsync();
+        var lead = matches.FirstOrDefault();
+        var ambiguous = matches.Count == 2 && (lead!.ChatId != chatId || lead.ChatUserId != current.Id);
+        return new { chatId, lead = ambiguous ? null : lead, ambiguous };
+    }
     [HttpPost("{id:int}/link")]
     public async Task<Lead> Link(int id, LinkRequest r)
     {
         var lead = await service.Find(id);
         if (lead.CurrentSellerId != current.Id) throw new BusinessException("Somente o vendedor atual pode vincular a conversa.", 403);
         if (lead.ChatId != null && (lead.ChatId != r.ChatId || lead.ChatUserId != current.Id)) throw new BusinessException("Este lead já está vinculado a outra conversa.", 409);
-        if (r.ChatId != lead.Phone + "@s.whatsapp.net") throw new BusinessException("O telefone da conversa não corresponde ao lead.");
+        var number = r.ChatId.Split('@')[0];
+        if (number != lead.Phone)
+        {
+            var variants = LeadRules.PhoneVariants(LeadRules.NormalizePhone(number));
+            if (!variants.Contains(lead.Phone)) throw new BusinessException("O telefone da conversa não corresponde ao lead.");
+            if (await db.Leads.AnyAsync(x => x.Id != id && x.BranchId == lead.BranchId && (x.Phone == number || variants.Contains(x.Phone))))
+                throw new BusinessException("Há mais de um lead com este telefone nesta sede.", 409);
+        }
         lead.ChatId = r.ChatId; lead.ChatUserId = current.Id; lead.Revision++;
         await db.SaveChangesAsync();
         return lead;
@@ -101,8 +122,8 @@ public class LeadsController(CrmDbContext db, CurrentUser current, LeadService s
         if (lead.CurrentSellerId != current.Id) throw new BusinessException("Somente o vendedor atual pode vincular a conversa.", 403);
         if (lead.Status == LeadStatuses.OptOut) throw new BusinessException("Este contato está marcado como Não Enviar Mais.", 403);
         if (lead.Revision != r.Revision) throw new BusinessException("O lead foi alterado por outro usuário. Atualize a página.", 409);
-        if (session == current.Id.ToString() && lead.ChatId == lead.Phone + "@s.whatsapp.net" && lead.ChatUserId == current.Id)
-            return new { phone = lead.Phone, chatId = lead.ChatId, requiresConfirmation = false, exists = true };
+        if (session == current.Id.ToString() && lead.ChatId != null && lead.ChatUserId == current.Id)
+            return new { phone = lead.ChatId.Split('@')[0], chatId = lead.ChatId, requiresConfirmation = false, exists = true };
         var result = await whatsapp.Send(current.Id, HttpMethod.Post, "resolve-phone", new { phone = lead.Phone });
         if (result.ValueKind == System.Text.Json.JsonValueKind.Null) throw new BusinessException("O número original e suas variantes não foram encontrados no WhatsApp.", 404);
         var phone = result.GetProperty("phone").GetString()!;
@@ -114,11 +135,14 @@ public class LeadsController(CrmDbContext db, CurrentUser current, LeadService s
         if (exists && phone == lead.Phone)
             return new { phone, chatId, requiresConfirmation = false, exists = true };
         if (lead.ChatId != null && (lead.ChatId != chatId || lead.ChatUserId != current.Id)) throw new BusinessException("Este lead já está vinculado a outra conversa.", 409);
-        if (await db.Leads.AnyAsync(x => x.Id != id && ((x.BranchId == lead.BranchId && x.Phone == phone) || (x.ChatUserId == current.Id && x.ChatId == chatId))))
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        var variants = phone == lead.Phone ? [phone] : LeadRules.PhoneVariants(LeadRules.NormalizePhone(phone));
+        if (await db.Leads.AnyAsync(x => x.Id != id && ((x.BranchId == lead.BranchId && (x.Phone == phone || variants.Contains(x.Phone))) || (x.ChatUserId == current.Id && x.ChatId == chatId))))
             throw new BusinessException("Já existe um lead com este telefone ou vinculado a esta conversa.", 409);
         lead.Phone = phone; lead.ChatId = chatId; lead.ChatUserId = current.Id;
         lead.UpdatedAt = DateTime.UtcNow; lead.Revision++;
         await db.SaveChangesAsync();
+        await transaction.CommitAsync();
         return new { phone, chatId, requiresConfirmation = false, exists };
     }
 }

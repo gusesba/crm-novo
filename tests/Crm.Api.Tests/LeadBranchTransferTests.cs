@@ -126,13 +126,16 @@ public class LeadBranchTransferTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task DuplicatePhoneInDestinationOrSelectedBatchRejectsEverything(bool duplicateInBatch)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task DuplicatePhoneInDestinationOrSelectedBatchRejectsEverything(bool duplicateInBatch, bool ninthDigitVariant)
     {
         using var factory = new ApiFactory();
         using var admin = await factory.Login();
         var data = await Seed(factory);
+        var duplicatePhone = ninthDigitVariant ? data.First.Phone.Remove(4, 1) : data.First.Phone;
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<CrmDbContext>();
@@ -140,12 +143,12 @@ public class LeadBranchTransferTests
             {
                 var second = (await db.Leads.FindAsync(data.Second.Id))!;
                 second.BranchId = data.Branch.Id;
-                second.Phone = data.First.Phone;
+                second.Phone = duplicatePhone;
                 data.Second.BranchId = second.BranchId;
                 data.Second.Phone = second.Phone;
             }
             else db.Leads.Add(new Lead
-            { BranchId = data.Branch.Id, SellerId = data.Seller.Id, CurrentSellerId = data.Seller.Id, Name = "Duplicado", Phone = data.First.Phone });
+            { BranchId = data.Branch.Id, SellerId = data.Seller.Id, CurrentSellerId = data.Seller.Id, Name = "Duplicado", Phone = duplicatePhone });
             await db.SaveChangesAsync();
         }
         var response = await admin.PostAsJsonAsync("/api/leads/transfer", new

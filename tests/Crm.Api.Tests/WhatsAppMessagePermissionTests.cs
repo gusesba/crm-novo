@@ -87,6 +87,18 @@ public class WhatsAppMessagePermissionTests
         Assert.Empty(factory.Service.Calls);
     }
 
+    [Fact]
+    public async Task OptOutStillBlocksSendingToTheVariantWithoutNinthDigit()
+    {
+        using var factory = new Factory();
+        using var client = await factory.Login("camila");
+        var lead = (await client.GetFromJsonAsync<Lead>("/api/leads/8"))!;
+        var chatId = lead.Phone.Remove(4, 1) + "@s.whatsapp.net";
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await MessageAction(client, "POST", "send", chatId)).StatusCode);
+        Assert.Empty(factory.Service.Calls);
+    }
+
     [Theory]
     [InlineData("5511988887777@s.whatsapp.net", HttpStatusCode.OK)]
     [InlineData("123@lid", HttpStatusCode.BadRequest)]

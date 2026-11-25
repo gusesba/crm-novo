@@ -38,6 +38,11 @@ public class LeadScopeTests
         Assert.Equal(0, filtered.GetProperty("total").GetInt32());
         Assert.Empty(filtered.GetProperty("items").EnumerateArray());
         Assert.Equal(HttpStatusCode.NotFound, (await scoped.GetAsync($"/api/leads/{lead.Id}")).StatusCode);
+        var matchPath = $"/api/leads/conversation-match?chatId={lead.Phone.Remove(4, 1)}%40s.whatsapp.net";
+        var scopedMatch = await scoped.GetFromJsonAsync<JsonElement>(matchPath);
+        Assert.Equal(JsonValueKind.Null, scopedMatch.GetProperty("lead").ValueKind);
+        var globalMatch = await global.GetFromJsonAsync<JsonElement>(matchPath);
+        Assert.Equal(lead.Id, globalMatch.GetProperty("lead").GetProperty("id").GetInt32());
         Assert.Equal(HttpStatusCode.Forbidden, (await scoped.PostAsJsonAsync("/api/leads", request)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await scoped.PutAsJsonAsync($"/api/leads/{lead.Id}", request)).StatusCode);
         Assert.Equal(isAdmin ? HttpStatusCode.NotFound : HttpStatusCode.Forbidden,

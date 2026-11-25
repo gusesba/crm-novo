@@ -19,10 +19,9 @@ public class LeadService(CrmDbContext db, CurrentUser current)
         if (!string.IsNullOrWhiteSpace(r.ReturnNote) && r.ReturnAt == null) throw new BusinessException("Informe a data do retorno.");
         if (!await db.Branches.AnyAsync(x => x.Id == r.BranchId && x.Active)) throw new BusinessException("Sede inativa ou inexistente.");
         var phone = LeadRules.NormalizePhone(r.Phone);
-        if (await db.Leads.AnyAsync(x => x.BranchId == r.BranchId && x.Phone == phone && x.Id != id))
-            throw new BusinessException("Já existe um cliente com este telefone nesta sede.", 409);
         if (r.ServiceId.HasValue && !await db.Catalog.AnyAsync(x => x.Id == r.ServiceId && x.Kind == "service" && x.Active)) throw new BusinessException("Serviço inválido.");
         if (r.ConditionId.HasValue && !await db.Catalog.AnyAsync(x => x.Id == r.ConditionId && x.Kind == "condition" && x.Active)) throw new BusinessException("Condição de venda inválida.");
+        await using var transaction = await db.Database.BeginTransactionAsync();
         Lead lead;
         if (id.HasValue)
         {
@@ -42,12 +41,17 @@ public class LeadService(CrmDbContext db, CurrentUser current)
             lead = new Lead { BranchId = r.BranchId, SellerId = r.SellerId, CurrentSellerId = r.SellerId };
             db.Leads.Add(lead);
         }
+        if (lead.Phone != phone)
+        {
+            var variants = LeadRules.PhoneVariants(phone);
+            if (await db.Leads.AnyAsync(x => x.BranchId == r.BranchId && variants.Contains(x.Phone) && x.Id != id))
+                throw new BusinessException("Já existe um cliente com este telefone nesta sede.", 409);
+        }
         lead.Name = r.Name.Trim(); lead.Phone = phone; lead.AdditionalPhone = r.AdditionalPhone;
         lead.Email = r.Email; lead.Gender = r.Gender; lead.BirthDate = r.BirthDate;
         lead.Origin = r.Origin; lead.Referral = r.Referral; lead.Discovery = r.Discovery; lead.ChoiceReason = r.ChoiceReason;
         lead.ServiceId = r.ServiceId; lead.ConditionId = r.ConditionId; lead.Status = r.Status; lead.Value = r.Value;
         lead.Notes = r.Notes; lead.UpdatedAt = DateTime.UtcNow; lead.Revision++;
-        await using var transaction = await db.Database.BeginTransactionAsync();
         await db.SaveChangesAsync();
         if (r.ReturnAt.HasValue)
         {
@@ -61,6 +65,7 @@ public class LeadService(CrmDbContext db, CurrentUser current)
     public async Task Transfer(TransferRequest request)
     {
         if (request.LeadIds.Length is 0 or > 500) throw new BusinessException("Selecione entre 1 e 500 leads.");
+        await using var transaction = request.BranchId.HasValue ? await db.Database.BeginTransactionAsync() : null;
         var leads = await current.Scope(db.Leads).Where(x => request.LeadIds.Contains(x.Id)).ToListAsync();
         if (leads.Count != request.LeadIds.Distinct().Count()) throw new BusinessException("Há leads fora do seu escopo.", 403);
         if (request.BranchId.HasValue)
@@ -68,7 +73,7 @@ public class LeadService(CrmDbContext db, CurrentUser current)
             if (!current.IsAdmin || current.BranchId.HasValue) throw new BusinessException("Somente o administrador global pode transferir leads entre sedes.", 403);
             if (!request.Permanent) throw new BusinessException("A transferência entre sedes deve ser permanente.");
             if (!await db.Branches.AnyAsync(x => x.Id == request.BranchId && x.Active)) throw new BusinessException("Sede inativa ou inexistente.");
-            var phones = leads.Select(x => x.Phone).ToArray();
+            var phones = leads.SelectMany(x => LeadRules.PhoneVariants(x.Phone)).ToArray();
             if (phones.Distinct().Count() != phones.Length || await db.Leads.AnyAsync(x => x.BranchId == request.BranchId
                 && phones.Contains(x.Phone) && !request.LeadIds.Contains(x.Id)))
                 throw new BusinessException("Há leads com o mesmo telefone na sede de destino.", 409);
@@ -81,6 +86,7 @@ public class LeadService(CrmDbContext db, CurrentUser current)
             LeadRules.Transfer(lead, request.SellerId, request.Permanent);
         }
         await db.SaveChangesAsync();
+        if (transaction != null) await transaction.CommitAsync();
     }
 
     private async Task ValidateSeller(int sellerId, int branchId)
