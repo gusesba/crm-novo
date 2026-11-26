@@ -14,6 +14,15 @@ test("lista do backup sem foto não cria imagem nem botão de consulta de foto",
   assert.doesNotMatch(html, /<img|profile-picture|Abrir foto de perfil/);
 });
 
+test("lista mantém conversa sem data e oculta apenas a data do card", () => {
+  const html = renderToStaticMarkup(createElement(ChatList, {
+    chats: [{ id: "5551999998888@s.whatsapp.net", name: "Contato", lastText: "Prévia preservada", updatedAt: 0, archived: false, pinnedAt: 0 }],
+    search: "", onSelect: () => {},
+  }));
+  assert.match(html, /Prévia preservada/);
+  assert.doesNotMatch(html, /<small>/);
+});
+
 test("conversa de backup informa mensagens sem mídia e não oferece compositor ou consulta de anexo", () => {
   const html = renderToStaticMarkup(createElement(Conversation, {
     chatId: "5551999998888@s.whatsapp.net", backup: true, backupNumber: "5551999990001", chats: [], onStartConversation: () => {}, onRead: () => {},

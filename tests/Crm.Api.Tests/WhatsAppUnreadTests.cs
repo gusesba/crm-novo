@@ -15,18 +15,20 @@ public class WhatsAppUnreadTests
     {
         public ConcurrentQueue<(string Path, HttpMethod Method, string Body)> Calls { get; } = new();
         public HttpStatusCode ReadStatus { get; set; } = HttpStatusCode.OK;
+        public string? ChatsJson { get; set; }
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var path = request.RequestUri!.AbsolutePath;
             Calls.Enqueue((path, request.Method, request.Content == null ? "" : await request.Content.ReadAsStringAsync(cancellationToken)));
             if (path.EndsWith("/chats"))
-                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("""
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(ChatsJson ?? """
                     [
                       {"id":"5551999999999@s.whatsapp.net","name":"Cliente","lastText":"Olá","updatedAt":1,"archived":0,"pinnedAt":0,"unreadCount":4},
                       {"id":"123@g.us","name":"Grupo","lastText":"Olá","updatedAt":1,"archived":1,"pinnedAt":1,"unreadCount":105},
                       {"id":"123@lid","name":"Legado","lastText":"Olá","updatedAt":1,"archived":0,"pinnedAt":0,"markedUnread":1},
                       {"id":"124@lid","name":"Inválido","lastText":"Olá","updatedAt":1,"archived":0,"pinnedAt":0,"unreadCount":"invalid"},
-                      {"id":"125@lid","name":"Negativo","lastText":"Olá","updatedAt":1,"archived":0,"pinnedAt":0,"unreadCount":-1}
+                      {"id":"125@lid","name":"Negativo","lastText":"Olá","updatedAt":1,"archived":0,"pinnedAt":0,"unreadCount":-1},
+                      {"id":"126@lid","name":"Sem data","lastText":"Prévia preservada","updatedAt":null,"archived":0,"pinnedAt":0}
                     ]
                     """, Encoding.UTF8, "application/json") };
             return new HttpResponseMessage(ReadStatus)
@@ -55,7 +57,10 @@ public class WhatsAppUnreadTests
         using var factory = new UnreadFactory();
         using var admin = await factory.Login();
         var chats = (await admin.GetFromJsonAsync<JsonElement[]>("/api/whatsapp/chats"))!;
-        Assert.Equal(new[] { 4, 105, 0, 0, 0 }, chats.Select(chat => chat.GetProperty("unreadCount").GetInt32()));
+        Assert.Equal(new[] { 4, 105, 0, 0, 0, 0 }, chats.Select(chat => chat.GetProperty("unreadCount").GetInt32()));
+        Assert.Equal(1, chats[0].GetProperty("updatedAt").GetInt64());
+        Assert.Equal(0, chats[5].GetProperty("updatedAt").GetInt64());
+        Assert.Equal("Prévia preservada", chats[5].GetProperty("lastText").GetString());
         Assert.True(chats[1].GetProperty("archived").GetBoolean());
         Assert.Equal(1, chats[1].GetProperty("pinnedAt").GetInt32());
         Assert.True(chats[2].GetProperty("markedUnread").GetBoolean());
@@ -64,6 +69,32 @@ public class WhatsAppUnreadTests
         Assert.Contains(factory.Service.Calls, call => call.Path == "/sessions/2/chats");
         using var seller = await factory.Login("camila");
         Assert.Equal(HttpStatusCode.Forbidden, (await seller.GetAsync("/api/whatsapp/chats?userId=3")).StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/api/whatsapp/chats")]
+    [InlineData("/api/whatsapp/backup/chats?number=5551999999999")]
+    public async Task InvalidChatAfterLargeValidListReturnsCompleteProblemDetails(string path)
+    {
+        using var factory = new UnreadFactory();
+        var validChats = Enumerable.Range(1, 499).Select(i => new
+        {
+            id = $"{i}@s.whatsapp.net",
+            name = "Cliente",
+            lastText = new string('a', 700),
+            updatedAt = 1,
+            archived = 0,
+            pinnedAt = 0
+        });
+        factory.Service.ChatsJson = JsonSerializer.Serialize(validChats.Cast<object>().Append(new { id = "invalid@lid" }));
+        using var client = await factory.Login();
+
+        using var response = await client.GetAsync(path);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(500, problem.GetProperty("status").GetInt32());
     }
 
     [Theory]

@@ -49,7 +49,7 @@ function ChatItem({ chat, selected, pictureUrl, onSelect, onOpenPhoto }: ItemPro
         </div>
         <span className="chat-item-meta">
           {chat.pinnedAt > 0 && <Pin size={11} aria-label="Conversa fixada" />}
-          <small>{date(chat.updatedAt)}</small>
+          {chat.updatedAt > 0 && <small>{date(chat.updatedAt)}</small>}
           {unreadCount > 0 && (
             <span className="chat-unread-count" aria-label={`${unreadCount} ${unreadCount === 1 ? "mensagem não lida" : "mensagens não lidas"}`}>
               {unreadCount > 99 ? "99+" : unreadCount}

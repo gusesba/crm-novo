@@ -67,10 +67,12 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
             orderby c.Name, c.Id
             select new { m.LeadId, c.Id, c.Name, c.Color }).ToListAsync();
         var classificationsByLead = classifications.ToLookup(x => x.LeadId);
+        // Finish processing the list before the JSON formatter starts the response.
         return chats.EnumerateArray().Select(chat =>
         {
             var id = chat.GetProperty("id").GetString()!;
             var whatsappName = chat.GetProperty("name").GetString();
+            var updatedAt = chat.GetProperty("updatedAt");
             var number = id.Split('@')[0];
             var lead = leadsByChat.GetValueOrDefault(id);
             return new
@@ -79,7 +81,7 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
                 name = lead?.Name ??
                     (!string.IsNullOrWhiteSpace(whatsappName) && !whatsappName.Contains('@') ? whatsappName : number),
                 lastText = chat.GetProperty("lastText").GetString(),
-                updatedAt = chat.GetProperty("updatedAt").GetInt64(),
+                updatedAt = updatedAt.ValueKind == JsonValueKind.Null ? 0 : updatedAt.GetInt64(),
                 archived = chat.GetProperty("archived").GetInt32() != 0,
                 pinnedAt = chat.GetProperty("pinnedAt").GetInt64(),
                 unreadCount = chat.TryGetProperty("unreadCount", out var unread) && unread.ValueKind == JsonValueKind.Number && unread.TryGetInt32(out var count) ? Math.Max(0, count) : 0,
@@ -89,7 +91,7 @@ public class WhatsAppController(WhatsAppClient client, CrmDbContext db, CurrentU
                 leadStatus = lead?.Status,
                 classifications = classificationsByLead[lead?.Id ?? 0].Select(x => new { x.Id, x.Name, x.Color })
             };
-        });
+        }).ToArray();
     }
     [HttpGet("profile-picture")]
     public async Task<IActionResult> ProfilePicture([Required] string chatId, int? userId)

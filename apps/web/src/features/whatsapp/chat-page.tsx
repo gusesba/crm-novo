@@ -141,7 +141,7 @@ function ChatContent({ backup }: { backup: boolean }) {
   return (
     <>
       {!backup && <Connection />}
-      {(error || chats.error) && (
+      {(error || (chats.error && chats.data)) && (
         <ErrorBox message={error || chats.error} retry={chats.reload} />
       )}
       {individualChat && leadMatch.error && (
@@ -198,6 +198,16 @@ function ChatContent({ backup }: { backup: boolean }) {
           <div className="chat-items">
             {chats.loading && !chats.data ? (
               <Loading />
+            ) : chats.error && !chats.data ? (
+              <Empty
+                title="Não foi possível carregar as conversas"
+                description={chats.error}
+                action={
+                  <button type="button" className="button secondary compact" onClick={chats.reload}>
+                    Tentar novamente
+                  </button>
+                }
+              />
             ) : !chats.data?.length ? (
               <Empty
                 title="Sem conversas ainda"

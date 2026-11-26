@@ -56,7 +56,14 @@ async function request(
 }
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await request(path, options);
-  return response.status === 204 ? (undefined as T) : response.json();
+  if (response.status === 204) return undefined as T;
+  try {
+    return await response.json();
+  } catch (error) {
+    if (error instanceof SyntaxError)
+      throw new ApiError("O servidor retornou uma resposta inválida. Tente novamente.", response.status);
+    throw error;
+  }
 }
 export async function downloadFile(path: string, filename: string, signal?: AbortSignal) {
   const response = await request(path, { signal });

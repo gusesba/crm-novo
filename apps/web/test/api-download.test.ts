@@ -79,3 +79,17 @@ test("JSON requests still handle CSRF and no-content responses", async (t) => {
   assert.equal(calls, 3);
   clearCsrf();
 });
+
+test("an incomplete chat response reports a readable error and a new request can recover", async (t) => {
+  const path = "/whatsapp/chats";
+  const chats = [{ id: "5551999999999@s.whatsapp.net", name: "Cliente" }];
+  const fetchMock = t.mock.method(globalThis, "fetch", async () =>
+    new Response('[{"id":"5551999999999@s.whatsapp.net"', { headers: { "Content-Type": "application/json" } }));
+
+  await assert.rejects(api(path), (error: unknown) =>
+    error instanceof ApiError && error.message === "O servidor retornou uma resposta inválida. Tente novamente.");
+  assert.equal(fetchMock.mock.callCount(), 1);
+
+  fetchMock.mock.mockImplementation(async () => Response.json(chats));
+  assert.deepEqual(await api(path), chats);
+});
